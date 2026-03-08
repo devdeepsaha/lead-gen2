@@ -94,16 +94,14 @@ export default function LeadTable({
     return arr;
   }, [leads, statusFilter, catFilter, sortType, searchQuery]);
 
+  // RECENTLY CHANGED: Safe pagination calculation preventing infinite React re-renders
   const totalPages = Math.max(1, Math.ceil(filteredLeads.length / perPage));
-  if (page > totalPages) setPage(totalPages);
+  const safePage = Math.min(page, totalPages);
+  const paginatedLeads = filteredLeads.slice((safePage - 1) * perPage, safePage * perPage);
 
-  const paginatedLeads = filteredLeads.slice((page - 1) * perPage, page * perPage);
-
-  // RECENTLY CHANGED: Maps directly over the leads array and passes it instantly, preventing stale closures
   const updateLead = (id, updates) => {
     if (!isAdmin && updates.status) return showToast("🔒 Unlock Admin Mode to tag leads.");
     if (!isAdmin && updates.replied !== undefined) return showToast("🔒 Unlock Admin Mode to change reply status.");
-    
     const newLeads = leads.map(l => l.id === id ? { ...l, ...updates } : l);
     setLeads(newLeads);
   };
@@ -148,16 +146,17 @@ export default function LeadTable({
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden relative bg-background-light md:bg-white">
+    <div className="flex-1 flex flex-col overflow-hidden relative bg-background-light lg:bg-white">
+      {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-24 md:bottom-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-xl whitespace-nowrap">
+        <div className="fixed bottom-24 lg:bottom-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-xl whitespace-nowrap">
           {toastMsg}
         </div>
       )}
 
       {/* ── HEADER CONTROLS ── */}
-      <div className="px-4 md:px-6 py-3 md:py-4 bg-white md:border-b border-primary/10 sticky top-0 z-10 shadow-sm md:shadow-none">
-        <div className="md:hidden flex items-stretch rounded-xl shadow-sm h-11 mb-3">
+      <div className="px-4 lg:px-6 py-3 lg:py-4 bg-white lg:border-b border-primary/10 sticky top-0 z-10 shadow-sm lg:shadow-none">
+        <div className="lg:hidden flex items-stretch rounded-xl shadow-sm h-11 mb-3">
           <div className="flex items-center justify-center pl-4 bg-white rounded-l-xl border border-r-0 border-primary/15">
             <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '18px' }}>search</span>
           </div>
@@ -170,8 +169,8 @@ export default function LeadTable({
           />
         </div>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="hidden md:block">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div className="hidden lg:block">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-black tracking-tight flex items-center gap-2">
                 Lead Directory {!isAdmin && <span className="material-symbols-outlined text-slate-300 text-lg">lock</span>}
@@ -184,21 +183,21 @@ export default function LeadTable({
             <p className="text-xs text-slate-500 mt-0.5">{filteredLeads.length} results · tag each as Job, Build, Build+, or Skip.</p>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-            <div className="md:hidden flex bg-slate-100 rounded-lg p-1 mb-1">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+            <div className="lg:hidden flex bg-slate-100 rounded-lg p-1 mb-1">
               <button className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${copyMode === 'email' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`} onClick={() => setCopyMode('email')}>Email</button>
               <button className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${copyMode === 'whatsapp' ? 'bg-[#25D366] shadow-sm text-white' : 'text-slate-400'}`} onClick={() => setCopyMode('whatsapp')}>WhatsApp</button>
             </div>
 
-            <div className="flex overflow-x-auto no-scrollbar gap-2 md:gap-0 md:border md:border-primary/15 md:rounded-lg">
+            <div className="flex overflow-x-auto no-scrollbar gap-2 lg:gap-0 lg:border lg:border-primary/15 lg:rounded-lg">
               {['all', 'job', 'build', 'build_plus', 'none', 'dismissed', 'replied'].map((s) => (
                 <button
                   key={s}
                   onClick={() => { setStatusFilter(s); setPage(1); }}
-                  className={`flex-shrink-0 h-8 md:h-auto px-4 md:px-3 md:py-1.5 text-xs font-bold transition-all rounded-full md:rounded-none md:border-r md:last:border-r-0 border-primary/15 ${
+                  className={`flex-shrink-0 h-8 lg:h-auto px-4 lg:px-3 lg:py-1.5 text-xs font-bold transition-all rounded-full lg:rounded-none lg:border-r lg:last:border-r-0 border-primary/15 ${
                     statusFilter === s 
-                      ? 'bg-primary text-white border-transparent md:border-primary/15' 
-                      : 'text-slate-500 bg-white border border-primary/15 md:border-transparent hover:bg-primary/5'
+                      ? 'bg-primary text-white border-transparent lg:border-primary/15' 
+                      : 'text-slate-500 bg-white border border-primary/15 lg:border-transparent hover:bg-primary/5'
                   }`}
                 >
                   {s === 'none' ? 'Unset' : s === 'build_plus' ? 'Build+' : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -207,9 +206,9 @@ export default function LeadTable({
             </div>
 
             <div className="flex gap-2">
-              <div className="relative flex-1 md:flex-none">
-                <button onClick={() => { setCatDropOpen(!catDropOpen); setSortDropOpen(false); }} className="w-full flex items-center justify-between md:justify-center gap-1.5 h-8 px-3 rounded-lg border border-primary/15 bg-white text-xs font-semibold hover:border-primary/40 transition-all">
-                  <span className="material-symbols-outlined text-primary md:hidden" style={{ fontSize: '15px' }}>filter_list</span>
+              <div className="relative flex-1 lg:flex-none">
+                <button onClick={() => { setCatDropOpen(!catDropOpen); setSortDropOpen(false); }} className="w-full flex items-center justify-between lg:justify-center gap-1.5 h-8 px-3 rounded-lg border border-primary/15 bg-white text-xs font-semibold hover:border-primary/40 transition-all">
+                  <span className="material-symbols-outlined text-primary lg:hidden" style={{ fontSize: '15px' }}>filter_list</span>
                   <span>{catFilter === 'all' ? 'All Categories' : (catFilter.length > 12 ? catFilter.slice(0,12)+'...' : catFilter)}</span>
                   <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>expand_more</span>
                 </button>
@@ -226,9 +225,9 @@ export default function LeadTable({
                   </div>
                 )}
               </div>
-              <div className="relative flex-1 md:flex-none">
-                <button onClick={() => { setSortDropOpen(!sortDropOpen); setCatDropOpen(false); }} className="w-full flex items-center justify-between md:justify-center gap-1.5 h-8 px-3 rounded-lg border border-primary/15 bg-white text-xs font-semibold hover:border-primary/40 transition-all">
-                  <span className="hidden md:inline material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>sort</span>
+              <div className="relative flex-1 lg:flex-none">
+                <button onClick={() => { setSortDropOpen(!sortDropOpen); setCatDropOpen(false); }} className="w-full flex items-center justify-between lg:justify-center gap-1.5 h-8 px-3 rounded-lg border border-primary/15 bg-white text-xs font-semibold hover:border-primary/40 transition-all">
+                  <span className="hidden lg:inline material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>sort</span>
                   <span>Sort: {sortType === 'default' ? 'Default' : sortType.split('_')[0].toUpperCase()}</span>
                   <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>expand_more</span>
                 </button>
@@ -240,7 +239,7 @@ export default function LeadTable({
                   </div>
                 )}
               </div>
-              <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }} className="h-8 px-2 rounded-lg border border-primary/15 text-xs font-semibold text-slate-600 bg-white outline-none hidden md:block">
+              <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }} className="h-8 px-2 rounded-lg border border-primary/15 text-xs font-semibold text-slate-600 bg-white outline-none hidden lg:block">
                 <option value="10">10/page</option><option value="15">15/page</option><option value="25">25/page</option><option value="50">50/page</option>
               </select>
             </div>
@@ -249,11 +248,10 @@ export default function LeadTable({
       </div>
 
       {/* ── 1. DESKTOP VIEW ── */}
-      <div className="hidden md:block flex-1 overflow-auto bg-white">
+      <div className="hidden lg:block flex-1 overflow-auto bg-white">
         <table className="w-full text-left text-sm" style={{ minWidth: '1000px' }}>
           <thead className="sticky top-0 z-10 bg-primary/5 border-b border-primary/10 text-slate-500">
             <tr>
-              {/* RECENTLY CHANGED: Cleanly mapping out the checkboxes without using the stale closure */}
               <th className="px-4 py-3 w-10">
                 <input 
                   type="checkbox" 
@@ -334,8 +332,8 @@ export default function LeadTable({
         </table>
       </div>
 
-      {/* ── 2. MOBILE VIEW (Card Format) ── */}
-      <div className="md:hidden flex-1 overflow-y-auto px-4 py-2 space-y-4">
+      {/* ── 2. MOBILE VIEW (Card Format exactly matching screenshot) ── */}
+      <div className="lg:hidden flex-1 overflow-y-auto px-4 py-2 space-y-4">
         {paginatedLeads.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <span className="material-symbols-outlined block text-4xl mb-2">search_off</span>
@@ -384,7 +382,7 @@ export default function LeadTable({
                         <span className="material-symbols-outlined fill-1 text-amber-400" style={{ fontSize: '14px' }}>star</span>{l.rating}
                       </div>
                     )}
-                    <span className="inline-block rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[9px] font-black uppercase tracking-wider">{l.category}</span>
+                    <span className="inline-block rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[9px] font-black uppercase tracking-wider whitespace-nowrap">{l.category}</span>
                   </div>
                 </div>
               </div>
@@ -408,22 +406,22 @@ export default function LeadTable({
       </div>
 
       {/* Desktop Pagination */}
-      <div className="hidden md:flex items-center justify-between border-t border-primary/10 bg-white px-5 py-3">
-        <p className="text-xs text-slate-500">Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, filteredLeads.length)} of {filteredLeads.length}</p>
+      <div className="hidden lg:flex items-center justify-between border-t border-primary/10 bg-white px-5 py-3">
+        <p className="text-xs text-slate-500">Showing {(safePage - 1) * perPage + 1}–{Math.min(safePage * perPage, filteredLeads.length)} of {filteredLeads.length}</p>
         <div className="flex items-center gap-1.5">
-          <button disabled={page === 1} onClick={() => setPage(page - 1)} className="flex items-center justify-center w-7 h-7 rounded border border-primary/15 text-slate-500 hover:bg-primary/5 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_left</span></button>
-          <span className="text-xs font-bold text-slate-600 px-2">Page {page} / {totalPages}</span>
-          <button disabled={page === totalPages} onClick={() => setPage(page + 1)} className="flex items-center justify-center w-7 h-7 rounded border border-primary/15 text-slate-500 hover:bg-primary/5 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_right</span></button>
+          <button disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="flex items-center justify-center w-7 h-7 rounded border border-primary/15 text-slate-500 hover:bg-primary/5 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_left</span></button>
+          <span className="text-xs font-bold text-slate-600 px-2">Page {safePage} / {totalPages}</span>
+          <button disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)} className="flex items-center justify-center w-7 h-7 rounded border border-primary/15 text-slate-500 hover:bg-primary/5 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_right</span></button>
         </div>
       </div>
       
       {/* Mobile Pagination */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-t border-primary/10">
-        <p className="text-xs text-slate-500">{filteredLeads.length > 0 ? `${(page - 1) * perPage + 1}–${Math.min(page * perPage, filteredLeads.length)} of ${filteredLeads.length}` : '0 results'}</p>
+      <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-t border-primary/10">
+        <p className="text-xs text-slate-500">{filteredLeads.length > 0 ? `${(safePage - 1) * perPage + 1}–${Math.min(safePage * perPage, filteredLeads.length)} of ${filteredLeads.length}` : '0 results'}</p>
         <div className="flex items-center gap-1.5">
-          <button disabled={page === 1} onClick={() => setPage(page - 1)} className="w-7 h-7 flex items-center justify-center rounded border border-primary/15 text-slate-500 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_left</span></button>
-          <span className="text-xs font-bold text-slate-600 px-1">{page}</span>
-          <button disabled={page === totalPages} onClick={() => setPage(page + 1)} className="w-7 h-7 flex items-center justify-center rounded border border-primary/15 text-slate-500 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_right</span></button>
+          <button disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="w-7 h-7 flex items-center justify-center rounded border border-primary/15 text-slate-500 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_left</span></button>
+          <span className="text-xs font-bold text-slate-600 px-1">{safePage}</span>
+          <button disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)} className="w-7 h-7 flex items-center justify-center rounded border border-primary/15 text-slate-500 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_right</span></button>
         </div>
       </div>
     </div>
