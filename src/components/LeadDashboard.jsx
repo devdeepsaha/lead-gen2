@@ -3,7 +3,7 @@ import DashboardAnalytics from './DashboardAnalytics';
 import LeadTable from './LeadTable';
 import OutreachLog from './OutreachLog';
 import SettingsPanel from './SettingsPanel';
-import OutreachCalendar from './OutreachCalendar'; // NEW: Import the calendar
+import OutreachCalendar from './OutreachCalendar';
 import FALLBACK_LEADS from '../data/fallback-leads';
 
 export default function LeadDashboard() {
@@ -11,7 +11,7 @@ export default function LeadDashboard() {
   const [outreachLog, setOutreachLog] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState('synced');
-  const [isCalOpen, setIsCalOpen] = useState(false); // NEW: Modal state
+  const [isCalOpen, setIsCalOpen] = useState(false);
   
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -61,17 +61,14 @@ export default function LeadDashboard() {
     initializeApp();
   }, []);
 
-  // RECENTLY CHANGED: Unified sync function to push all history and outreach data to KV
   const syncToCloud = async (updatedLeads, updatedDaily, updatedOutreach) => {
     setSyncStatus('syncing');
     
-    // Prepare status map for KV
     const statuses = {};
     updatedLeads.forEach(l => {
       statuses[l.id] = { status: l.status, replied: l.replied };
     });
 
-    // Use current state if specific updates aren't passed
     const outreachToSync = updatedOutreach || outreachLog;
     const dailyToSync = updatedDaily || dailyData;
 
@@ -83,7 +80,6 @@ export default function LeadDashboard() {
           statuses,
           daily: dailyToSync,
           outreach: outreachToSync,
-          // NEW: Send the history map so the calendar detects data
           history: {
             [dailyToSync.date]: dailyToSync.counts
           }
@@ -98,7 +94,6 @@ export default function LeadDashboard() {
 
   return (
     <div className="bg-background-light text-slate-900 font-display">
-      {/* Outreach Calendar Modal */}
       <OutreachCalendar 
         isOpen={isCalOpen} 
         onClose={() => setIsCalOpen(false)} 
@@ -158,9 +153,30 @@ export default function LeadDashboard() {
           </aside>
 
           <main className="flex-1 overflow-hidden flex flex-col bg-background-light">
-            {/* NEW: Passed setIsCalOpen down to DashboardAnalytics */}
             {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} onOpenCalendar={() => setIsCalOpen(true)} />}
-            {activeView === 'leads' && <LeadTable leads={leads} setLeads={(updated) => { setLeads(updated); syncToCloud(updated); }} searchQuery={searchQuery} dailyData={dailyData} setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d); }} />}
+            
+            {/* CHANGED: Corrected props passed to LeadTable to include outreach states */}
+            {activeView === 'leads' && (
+              <LeadTable 
+                leads={leads} 
+                setLeads={(updated) => { 
+                  setLeads(updated); 
+                  syncToCloud(updated, dailyData, outreachLog); 
+                }} 
+                searchQuery={searchQuery} 
+                dailyData={dailyData} 
+                setDailyData={(d) => { 
+                  setDailyData(d); 
+                  syncToCloud(leads, d, outreachLog); 
+                }}
+                outreachLog={outreachLog}
+                setOutreachLog={(o) => {
+                  setOutreachLog(o);
+                  syncToCloud(leads, dailyData, o);
+                }}
+              />
+            )}
+            
             {activeView === 'outreach' && <OutreachLog leads={leads} outreachLog={outreachLog} setOutreachLog={(o) => { setOutreachLog(o); syncToCloud(leads, dailyData, o); }} />}
             {activeView === 'settings' && <SettingsPanel leads={leads} setLeads={(updated) => { setLeads(updated); syncToCloud(updated); }} dailyData={dailyData} setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d); }} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData)} />}
           </main>
