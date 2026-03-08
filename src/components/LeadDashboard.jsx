@@ -24,37 +24,47 @@ export default function LeadDashboard() {
   useEffect(() => {
     const initializeApp = async () => {
       setIsLoading(true);
-      setLoadingMsg('Fetching leads from cloud...');
+      setLoadingMsg('Syncing with cloud...');
       
       let fetchedLeads = null;
+      let fetchedStatuses = {};
 
       try {
-        const res = await fetch('/api/leads').catch(() => null);
-        
-        if (res && res.ok) {
-          const contentType = res.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            fetchedLeads = await res.json();
-          } else {
-            console.warn("API route returned HTML instead of JSON. Using fallback.");
-          }
+        // 1. Fetch Leads
+        const leadsRes = await fetch('/api/leads').catch(() => null);
+        if (leadsRes && leadsRes.ok && leadsRes.headers.get("content-type")?.includes("application/json")) {
+          fetchedLeads = await leadsRes.json();
+        }
+
+        // 2. Fetch Status Tags (This is what's missing!)
+        const statusRes = await fetch('/api/statuses').catch(() => null);
+        if (statusRes && statusRes.ok && statusRes.headers.get("content-type")?.includes("application/json")) {
+          const statusData = await statusRes.json();
+          // Check if the API returns { statuses: {...} } or just the map
+          fetchedStatuses = statusData.statuses || statusData;
         }
       } catch (err) {
-        console.warn("Failed to load leads from API", err);
+        console.warn("Cloud sync failed, using fallback.", err);
       } 
 
-      if (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) {
-        setLeads(fetchedLeads.map(l => ({ ...l, id: String(l.id), status: "none", replied: false, checked: false })));
-      } else {
-        setLeads(FALLBACK_LEADS.map((l, i) => ({
+      const baseLeads = (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) 
+        ? fetchedLeads 
+        : FALLBACK_LEADS;
+
+      // 3. Merge the tags into the leads
+      const mergedLeads = baseLeads.map(l => {
+        const cloudData = fetchedStatuses[l.id];
+        return {
           ...l,
-          id: String(l.id || i + 1),
-          status: "none",
-          replied: false,
-          checked: false,
-        })));
-      }
-      
+          id: String(l.id),
+          // If cloudData is an object {status, replied}, use it, otherwise use the raw value
+          status: (typeof cloudData === 'object' ? cloudData.status : cloudData) || "none",
+          replied: (typeof cloudData === 'object' ? !!cloudData.replied : false),
+          checked: false
+        };
+      });
+
+      setLeads(mergedLeads);
       setIsLoading(false);
     };
 
