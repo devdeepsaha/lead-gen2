@@ -157,25 +157,32 @@ export default function LeadDashboard() {
             
             {/* CHANGED: Corrected props passed to LeadTable to include outreach states */}
             {activeView === 'leads' && (
-              <LeadTable 
-                leads={leads} 
-                setLeads={(updated) => { 
-                  setLeads(updated); 
-                  syncToCloud(updated, dailyData, outreachLog); 
-                }} 
-                searchQuery={searchQuery} 
-                dailyData={dailyData} 
-                setDailyData={(d) => { 
-                  setDailyData(d); 
-                  syncToCloud(leads, d, outreachLog); 
-                }}
-                outreachLog={outreachLog}
-                setOutreachLog={(o) => {
-                  setOutreachLog(o);
-                  syncToCloud(leads, dailyData, o);
-                }}
-              />
-            )}
+  <LeadTable 
+    leads={leads} 
+    setLeads={(updated) => {
+      // Use a functional update to ensure we always have the latest array
+      setLeads(prevLeads => {
+        const newLeads = typeof updated === 'function' ? updated(prevLeads) : updated;
+        // Only sync if we have a valid array
+        if (Array.isArray(newLeads)) {
+          syncToCloud(newLeads, dailyData, outreachLog);
+        }
+        return newLeads;
+      });
+    }} 
+    searchQuery={searchQuery} 
+    dailyData={dailyData} 
+    setDailyData={(d) => { 
+      setDailyData(d); 
+      syncToCloud(leads, d, outreachLog); 
+    }}
+    outreachLog={outreachLog} 
+    setOutreachLog={(o) => { 
+      setOutreachLog(o); 
+      syncToCloud(leads, dailyData, o); 
+    }}
+  />
+)}
             
             {activeView === 'outreach' && <OutreachLog leads={leads} outreachLog={outreachLog} setOutreachLog={(o) => { setOutreachLog(o); syncToCloud(leads, dailyData, o); }} />}
             {activeView === 'settings' && <SettingsPanel leads={leads} setLeads={(updated) => { setLeads(updated); syncToCloud(updated); }} dailyData={dailyData} setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d); }} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData)} />}
