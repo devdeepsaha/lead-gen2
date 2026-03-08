@@ -13,52 +13,16 @@ const TEMPLATES = {
     }
   },
   whatsapp: {
-  job: {
-    build: (name) => 
-`Hi ${name} team 👋
-
-My name is Devdeep. I'm a web developer who enjoys building design-focused websites and interactive web experiences.
-
-I recently came across your work and thought I'd reach out to see if you're open to collaborating with freelance developers.
-
-Here's a quick look at some of my work:
-https://devdeepsahaportfolio.vercel.app/
-
-Would love to connect if that sounds relevant 🙂`
-  },
-
-  build: {
-    build: (name) => 
-`Hi ${name} 👋
-
-I was just checking out your business online and noticed you don't seem to have a dedicated website yet (or it could use a small refresh).
-
-I'm Devdeep, a freelance developer who helps businesses build clean, modern websites that load fast and look professional.
-
-If you're ever considering improving your online presence, I'd be happy to help.
-
-You can see some of my work here:
-https://devwebstudio.vercel.app/
-
-No pressure at all — just thought I'd reach out 🙂`
-  },
-
-  build_plus: {
-    build: (name) => 
-`Hi ${name} 👋
-
-I came across your website and had a few ideas on how the homepage could look more modern and structured.
-
-Just for fun, I actually drafted a quick visual concept for how it could look (I'll attach it here).
-
-I'm a freelance web developer who focuses on clean design and fast, performance-optimized websites.
-
-If you're curious to explore the idea further, feel free to check my work:
-https://devwebstudio.vercel.app/
-
-Happy to share a few suggestions if you're interested 🙂`
+    job: {
+      build: (name) => `Hey ${name} team 👋 I'm Devdeep, a final-year CSE student & creative web developer.\n\nI love building aesthetic, high-performance websites where design and logic meet. Would love to connect if you're looking for someone who can think visually and execute technically!\n\nCheck out my work: https://devdeepsahaportfolio.vercel.app/\n\nLet me know if you're open to a quick chat! 🚀`
+    },
+    build: {
+      build: (name) => `Hey ${name} team! 👋 I'm Devdeep, a freelance web developer.\n\nI help businesses build super clean, fast, and modern websites. I'd love to help out if you're ever looking to upgrade your digital presence or improve your user experience.\n\nCheck out my work here: https://devwebstudio.vercel.app/\n\nLet's connect! 🚀`
+    },
+    build_plus: {
+      build: (name) => `Hey ${name} team 👋 I checked out your site and noticed a huge opportunity to modernize the design and user experience!\n\nI actually created a quick homepage concept for you to show what I mean (see attached image 📎). I specialize in high-performance web revamps that look clean and modern.\n\nTake a look at my portfolio: https://devwebstudio.vercel.app/\n\nWould love to chat if you're open to upgrading your site! 🚀`
+    }
   }
-}
 };
 
 export default function LeadTable({ 
@@ -135,10 +99,13 @@ export default function LeadTable({
 
   const paginatedLeads = filteredLeads.slice((page - 1) * perPage, page * perPage);
 
+  // RECENTLY CHANGED: Maps directly over the leads array and passes it instantly, preventing stale closures
   const updateLead = (id, updates) => {
     if (!isAdmin && updates.status) return showToast("🔒 Unlock Admin Mode to tag leads.");
     if (!isAdmin && updates.replied !== undefined) return showToast("🔒 Unlock Admin Mode to change reply status.");
-    setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+    
+    const newLeads = leads.map(l => l.id === id ? { ...l, ...updates } : l);
+    setLeads(newLeads);
   };
 
   const handleStatusClick = (id, newStatus) => {
@@ -190,7 +157,6 @@ export default function LeadTable({
 
       {/* ── HEADER CONTROLS ── */}
       <div className="px-4 md:px-6 py-3 md:py-4 bg-white md:border-b border-primary/10 sticky top-0 z-10 shadow-sm md:shadow-none">
-        {/* Mobile Search */}
         <div className="md:hidden flex items-stretch rounded-xl shadow-sm h-11 mb-3">
           <div className="flex items-center justify-center pl-4 bg-white rounded-l-xl border border-r-0 border-primary/15">
             <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '18px' }}>search</span>
@@ -219,13 +185,11 @@ export default function LeadTable({
           </div>
           
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-            {/* Platform Toggle (Mobile) */}
             <div className="md:hidden flex bg-slate-100 rounded-lg p-1 mb-1">
               <button className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${copyMode === 'email' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-400'}`} onClick={() => setCopyMode('email')}>Email</button>
               <button className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${copyMode === 'whatsapp' ? 'bg-[#25D366] shadow-sm text-white' : 'text-slate-400'}`} onClick={() => setCopyMode('whatsapp')}>WhatsApp</button>
             </div>
 
-            {/* Scrollable Filters */}
             <div className="flex overflow-x-auto no-scrollbar gap-2 md:gap-0 md:border md:border-primary/15 md:rounded-lg">
               {['all', 'job', 'build', 'build_plus', 'none', 'dismissed', 'replied'].map((s) => (
                 <button
@@ -284,12 +248,24 @@ export default function LeadTable({
         </div>
       </div>
 
-      {/* ── 1. DESKTOP VIEW (Visible on md and up, exactly matching your screenshot) ── */}
+      {/* ── 1. DESKTOP VIEW ── */}
       <div className="hidden md:block flex-1 overflow-auto bg-white">
         <table className="w-full text-left text-sm" style={{ minWidth: '1000px' }}>
           <thead className="sticky top-0 z-10 bg-primary/5 border-b border-primary/10 text-slate-500">
             <tr>
-              <th className="px-4 py-3 w-10"><input type="checkbox" className="rounded border-slate-300 text-primary w-3.5 h-3.5"/></th>
+              {/* RECENTLY CHANGED: Cleanly mapping out the checkboxes without using the stale closure */}
+              <th className="px-4 py-3 w-10">
+                <input 
+                  type="checkbox" 
+                  className="rounded border-slate-300 text-primary w-3.5 h-3.5"
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    const idsOnPage = paginatedLeads.map(l => l.id);
+                    const newLeads = leads.map(l => idsOnPage.includes(l.id) ? { ...l, checked } : l);
+                    setLeads(newLeads);
+                  }}
+                />
+              </th>
               <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider">Business & Website</th>
               <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider">Category</th>
               <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-center">Rating</th>
@@ -307,7 +283,9 @@ export default function LeadTable({
               const urlObj = l.website ? new URL(l.website.startsWith('http') ? l.website : `https://${l.website}`).hostname.replace('www.', '') : null;
               return (
                 <tr key={l.id} className="hover:bg-primary/5 transition-colors group">
-                  <td className="px-4 py-4"><input type="checkbox" className="rounded border-slate-300 text-primary w-3.5 h-3.5"/></td>
+                  <td className="px-4 py-4">
+                    <input type="checkbox" checked={l.checked || false} onChange={(e) => updateLead(l.id, { checked: e.target.checked })} className="rounded border-slate-300 text-primary w-3.5 h-3.5"/>
+                  </td>
                   <td className="px-4 py-4 min-w-[220px]">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-slate-900 text-sm truncate max-w-[220px] block">{l.name}</span>
@@ -356,10 +334,13 @@ export default function LeadTable({
         </table>
       </div>
 
-      {/* ── 2. MOBILE VIEW (Visible on small screens, accurately matched to your image) ── */}
+      {/* ── 2. MOBILE VIEW (Card Format) ── */}
       <div className="md:hidden flex-1 overflow-y-auto px-4 py-2 space-y-4">
         {paginatedLeads.length === 0 ? (
-          <div className="text-center py-12 text-slate-400"><span className="material-symbols-outlined block text-4xl mb-2">search_off</span>No leads found.</div>
+          <div className="text-center py-12 text-slate-400">
+            <span className="material-symbols-outlined block text-4xl mb-2">search_off</span>
+            No leads found.
+          </div>
         ) : paginatedLeads.map((l) => {
           const urlObj = l.website ? new URL(l.website.startsWith('http') ? l.website : `https://${l.website}`).hostname.replace('www.', '') : null;
           return (
@@ -427,7 +408,7 @@ export default function LeadTable({
       </div>
 
       {/* Desktop Pagination */}
-      <div className="flex items-center justify-between border-t border-primary/10 bg-white px-5 py-3 hidden md:flex">
+      <div className="hidden md:flex items-center justify-between border-t border-primary/10 bg-white px-5 py-3">
         <p className="text-xs text-slate-500">Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, filteredLeads.length)} of {filteredLeads.length}</p>
         <div className="flex items-center gap-1.5">
           <button disabled={page === 1} onClick={() => setPage(page - 1)} className="flex items-center justify-center w-7 h-7 rounded border border-primary/15 text-slate-500 hover:bg-primary/5 disabled:opacity-30"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>chevron_left</span></button>

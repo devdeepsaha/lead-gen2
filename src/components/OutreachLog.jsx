@@ -1,38 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
-// CHANGED: Passed 'leads' as a prop so we can check if a logged lead has replied
-export default function OutreachLog({ leads = [] }) {
-  const [outreachLog, setOutreachLog] = useState([]);
-
-  // CHANGED: Converted the loadOutreachLog() initialization into a React useEffect hook
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("lf_outreach_log");
-      if (raw) setOutreachLog(JSON.parse(raw));
-    } catch (e) {
-      console.error("Failed to load outreach log", e);
-    }
-  }, []); // Runs once when the component mounts (e.g., when you click the Outreach tab)
-
-  // CHANGED: Centralized state and localStorage sync function
-  const updateLog = (newLog) => {
-    setOutreachLog(newLog);
-    try {
-      localStorage.setItem("lf_outreach_log", JSON.stringify(newLog.slice(0, 500))); // Keep max 500 as original
-    } catch (e) {
-      console.error("Failed to save outreach log", e);
-    }
-  };
-
+// RECENTLY CHANGED: Removed local state and localStorage logic. 
+// Now it receives outreachLog directly from the Dashboard and uses setOutreachLog to update it.
+export default function OutreachLog({ leads = [], outreachLog = [], setOutreachLog }) {
+  
   const clearAll = () => {
     if (!window.confirm("Delete all outreach history?")) return;
-    updateLog([]);
+    setOutreachLog([]); // This will automatically trigger syncToCloud from the Dashboard
   };
 
   const deleteEntry = (index) => {
     const newLog = [...outreachLog];
     newLog.splice(index, 1);
-    updateLog(newLog);
+    setOutreachLog(newLog); // This will automatically trigger syncToCloud from the Dashboard
   };
 
   // Date formatting helpers
@@ -58,7 +38,7 @@ export default function OutreachLog({ leads = [] }) {
   };
 
   return (
-    <div id="view-outreach" className="flex-1 p-6 overflow-y-auto flex flex-col">
+    <div id="view-outreach" className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col pb-24 md:pb-6">
       <div className="mb-6">
         <h1 className="text-2xl font-black tracking-tight">Outreach History</h1>
         <p className="text-sm text-slate-500">

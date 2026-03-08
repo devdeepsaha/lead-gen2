@@ -12,14 +12,13 @@ export default function LeadDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState('synced');
   const [isCalOpen, setIsCalOpen] = useState(false);
+  
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminKey, setAdminKey] = useState("");
-  
+
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  
-  // RECENTLY CHANGED: This state guarantees the mobile search bar connects properly to prevent the '0 results' bug
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(''); 
 
   const [dailyData, setDailyData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -47,7 +46,7 @@ export default function LeadDashboard() {
           if (sData.outreach) fetchedOutreach = sData.outreach;
           if (sData.daily) setDailyData(sData.daily);
         }
-      } catch (err) {}
+      } catch (err) { console.error(err); }
 
       const baseLeads = (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) ? fetchedLeads : FALLBACK_LEADS;
       const mergedLeads = baseLeads.map(l => ({
@@ -83,14 +82,32 @@ export default function LeadDashboard() {
           history: { [(updatedDaily || dailyData).date]: (updatedDaily || dailyData).counts }
         }),
       });
+
       if (res.status === 401) {
         setSyncStatus('error');
         alert("Unauthorized: Incorrect Admin Key.");
         setIsAdmin(false);
+        setAdminKey("");
         return;
       }
       setSyncStatus('synced');
     } catch (e) { setSyncStatus('error'); }
+  };
+
+  // RECENTLY CHANGED: Safe, dedicated handler functions to prevent the 401 Unauthorized bug
+  const handleUpdateLeads = (newLeads) => {
+    setLeads(newLeads);
+    syncToCloud(newLeads, dailyData, outreachLog);
+  };
+
+  const handleUpdateDaily = (newDaily) => {
+    setDailyData(newDaily);
+    syncToCloud(leads, newDaily, outreachLog);
+  };
+
+  const handleUpdateOutreach = (newOutreach) => {
+    setOutreachLog(newOutreach);
+    syncToCloud(leads, dailyData, newOutreach);
   };
 
   const handleDeleteOutreach = (timestamp) => {
@@ -115,7 +132,7 @@ export default function LeadDashboard() {
 
   const handleExportMarked = () => {
     const marked = leads.filter((l) => l.checked);
-    if (!marked.length) return alert("No leads checked! Check boxes in the Directory first.");
+    if (!marked.length) return alert("No leads checked! Select them in the directory first.");
     const header = ["Name", "Phone", "Website", "Email", "Category", "Rating", "Reviews", "Status"];
     const rows = marked.map((l) => 
       [l.name, l.phone, l.website, l.email, l.category, l.rating, l.reviews, l.status]
@@ -131,8 +148,8 @@ export default function LeadDashboard() {
   const NavItems = [
     { id: 'dashboard', icon: 'dashboard', label: 'Home' },
     { id: 'leads', icon: 'view_list', label: 'Directory' },
-    { id: 'outreach', icon: 'mail', label: 'Outreach' },
-    { id: 'settings', icon: 'settings', label: 'Settings' }
+    { id: 'outreach', icon: 'mail', label: 'Log' },
+    { id: 'settings', icon: 'settings', label: 'Setup' }
   ];
 
   return (
@@ -159,7 +176,6 @@ export default function LeadDashboard() {
             </div>
           </div>
           
-          {/* Desktop Search */}
           <div className="hidden md:flex items-center gap-1 border-l border-primary/20 pl-6 ml-2">
             <label className="relative flex items-center">
               <span className="material-symbols-outlined absolute left-3 text-slate-400" style={{ fontSize: '18px' }}>search</span>
@@ -184,8 +200,6 @@ export default function LeadDashboard() {
 
       {/* ── UNIFIED BODY ── */}
       <div className="flex flex-1 overflow-hidden relative">
-        
-        {/* RECENTLY CHANGED: md:flex ensures this is ALWAYS visible on small laptops */}
         <aside className={`hidden md:flex flex-col border-r border-primary/10 bg-white transition-all duration-300 z-20`} style={{ width: sidebarCollapsed ? '72px' : '240px' }}>
           <div className="flex items-center justify-center p-4">
             <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-primary/10 text-slate-400 hover:text-primary transition-colors">
@@ -202,7 +216,6 @@ export default function LeadDashboard() {
           </nav>
         </aside>
 
-        {/* MAIN CONTENT AREA */}
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 md:pb-0 w-full">
           {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} onOpenCalendar={() => setIsCalOpen(true)} />}
           
@@ -210,27 +223,20 @@ export default function LeadDashboard() {
             <LeadTable 
               leads={leads} 
               isAdmin={isAdmin} 
-              setLeads={(updated) => {
-                setLeads(prev => {
-                  const next = typeof updated === 'function' ? updated(prev) : updated;
-                  syncToCloud(next, dailyData, outreachLog);
-                  return next;
-                });
-              }} 
+              setLeads={handleUpdateLeads} // Passed directly
               searchQuery={searchQuery} 
-              setSearchQuery={setSearchQuery} // RECENTLY CHANGED: Solves the '0 results' mobile bug
+              setSearchQuery={setSearchQuery} 
               dailyData={dailyData} 
-              setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d, outreachLog); }}
+              setDailyData={handleUpdateDaily} // Passed directly
               outreachLog={outreachLog}
-              setOutreachLog={(o) => { setOutreachLog(o); syncToCloud(leads, dailyData, o); }}
+              setOutreachLog={handleUpdateOutreach} // Passed directly
             />
           )}
           
-          {activeView === 'outreach' && <OutreachLog leads={leads} outreachLog={outreachLog} setOutreachLog={(o) => { setOutreachLog(o); syncToCloud(leads, dailyData, o); }} />}
-          {activeView === 'settings' && <SettingsPanel leads={leads} isAdmin={isAdmin} setLeads={(updated) => { setLeads(updated); syncToCloud(updated); }} dailyData={dailyData} setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d); }} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData, outreachLog)} />}
+          {activeView === 'outreach' && <OutreachLog leads={leads} outreachLog={outreachLog} setOutreachLog={handleUpdateOutreach} />}
+          {activeView === 'settings' && <SettingsPanel leads={leads} isAdmin={isAdmin} setLeads={handleUpdateLeads} dailyData={dailyData} setDailyData={handleUpdateDaily} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData, outreachLog)} />}
         </main>
 
-        {/* MOBILE BOTTOM NAV */}
         <nav className="md:hidden absolute bottom-0 left-0 right-0 border-t border-primary/10 bg-white px-4 pb-safe pt-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
           <div className="flex justify-around items-center max-w-lg mx-auto pb-1">
             {NavItems.map(item => (
