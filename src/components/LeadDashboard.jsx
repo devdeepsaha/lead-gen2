@@ -3,13 +3,15 @@ import DashboardAnalytics from './DashboardAnalytics';
 import LeadTable from './LeadTable';
 import OutreachLog from './OutreachLog';
 import SettingsPanel from './SettingsPanel';
+import OutreachCalendar from './OutreachCalendar'; // NEW: Import the calendar
 import FALLBACK_LEADS from '../data/fallback-leads';
 
 export default function LeadDashboard() {
   const [leads, setLeads] = useState([]);
-  const [loadingMsg, setLoadingMsg] = useState('Loading leads...');
+  const [outreachLog, setOutreachLog] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [syncStatus, setSyncState] = useState('synced'); 
+  const [syncStatus, setSyncStatus] = useState('synced');
+  const [isCalOpen, setIsCalOpen] = useState(false); // NEW: Modal state
   
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -24,82 +26,89 @@ export default function LeadDashboard() {
   useEffect(() => {
     const initializeApp = async () => {
       setIsLoading(true);
-      setLoadingMsg('Syncing with cloud...');
-      
       let fetchedLeads = null;
       let fetchedStatuses = {};
+      let fetchedOutreach = [];
 
       try {
-        // 1. Fetch Leads
-        const leadsRes = await fetch('/api/leads').catch(() => null);
-        if (leadsRes && leadsRes.ok && leadsRes.headers.get("content-type")?.includes("application/json")) {
-          fetchedLeads = await leadsRes.json();
+        const [lRes, sRes] = await Promise.all([
+          fetch('/api/leads'),
+          fetch('/api/statuses')
+        ]).catch(() => [null, null]);
+
+        if (lRes?.ok) fetchedLeads = await lRes.json();
+        if (sRes?.ok) {
+          const sData = await sRes.json();
+          fetchedStatuses = sData.statuses || sData;
+          if (sData.outreach) fetchedOutreach = sData.outreach;
+          if (sData.daily) setDailyData(sData.daily);
         }
+      } catch (err) { console.error(err); }
 
-        // 2. Fetch Status Tags (This is what's missing!)
-        const statusRes = await fetch('/api/statuses').catch(() => null);
-        if (statusRes && statusRes.ok && statusRes.headers.get("content-type")?.includes("application/json")) {
-          const statusData = await statusRes.json();
-          // Check if the API returns { statuses: {...} } or just the map
-          fetchedStatuses = statusData.statuses || statusData;
-        }
-      } catch (err) {
-        console.warn("Cloud sync failed, using fallback.", err);
-      } 
-
-      const baseLeads = (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) 
-        ? fetchedLeads 
-        : FALLBACK_LEADS;
-
-      // 3. Merge the tags into the leads
-      const mergedLeads = baseLeads.map(l => {
-        const cloudData = fetchedStatuses[l.id];
-        return {
-          ...l,
-          id: String(l.id),
-          // If cloudData is an object {status, replied}, use it, otherwise use the raw value
-          status: (typeof cloudData === 'object' ? cloudData.status : cloudData) || "none",
-          replied: (typeof cloudData === 'object' ? !!cloudData.replied : false),
-          checked: false
-        };
-      });
+      const baseLeads = (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) ? fetchedLeads : FALLBACK_LEADS;
+      const mergedLeads = baseLeads.map(l => ({
+        ...l,
+        id: String(l.id),
+        status: (typeof fetchedStatuses[l.id] === 'object' ? fetchedStatuses[l.id].status : fetchedStatuses[l.id]) || "none",
+        replied: (typeof fetchedStatuses[l.id] === 'object' ? !!fetchedStatuses[l.id].replied : false),
+        checked: false
+      }));
 
       setLeads(mergedLeads);
+      setOutreachLog(fetchedOutreach);
       setIsLoading(false);
     };
-
     initializeApp();
   }, []);
 
-  const handleExport = () => {
-    const marked = leads.filter((l) => l.checked);
-    if (!marked.length) return alert("No leads checked! Use checkboxes to select.");
+  // RECENTLY CHANGED: Unified sync function to push all history and outreach data to KV
+  const syncToCloud = async (updatedLeads, updatedDaily, updatedOutreach) => {
+    setSyncStatus('syncing');
     
-    const header = ["Name", "Phone", "Website", "Email", "Category", "Rating", "Reviews", "Address", "Status"];
-    const rows = marked.map((l) =>
-      [l.name, l.phone, l.website, l.email, l.category, l.rating, l.reviews, l.address, l.status].map((v) => {
-        const s = (v || "").toString().replace(/"/g, '""');
-        return `"${s}"`;
-      })
-    );
-    const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "leads_export.csv";
-    a.click();
-  };
+    // Prepare status map for KV
+    const statuses = {};
+    updatedLeads.forEach(l => {
+      statuses[l.id] = { status: l.status, replied: l.replied };
+    });
 
-  const forceSync = () => {
-    setSyncState('syncing');
-    setTimeout(() => setSyncState('synced'), 1000); 
+    // Use current state if specific updates aren't passed
+    const outreachToSync = updatedOutreach || outreachLog;
+    const dailyToSync = updatedDaily || dailyData;
+
+    try {
+      await fetch('/api/statuses', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          statuses,
+          daily: dailyToSync,
+          outreach: outreachToSync,
+          // NEW: Send the history map so the calendar detects data
+          history: {
+            [dailyToSync.date]: dailyToSync.counts
+          }
+        }),
+      });
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error("Sync failed", e);
+      setSyncStatus('error');
+    }
   };
 
   return (
     <div className="bg-background-light text-slate-900 font-display">
+      {/* Outreach Calendar Modal */}
+      <OutreachCalendar 
+        isOpen={isCalOpen} 
+        onClose={() => setIsCalOpen(false)} 
+        outreachLog={outreachLog} 
+      />
+
       {isLoading && (
         <div id="loading-overlay" className="fixed inset-0 bg-[#f7f5f8]/95 z-[9999] flex flex-col items-center justify-center gap-4">
-          <div className="spinner border-3 border-primary/20 border-t-primary rounded-full w-10 h-10 animate-spin"></div>
-          <p className="text-sm font-semibold text-slate-500">{loadingMsg}</p>
+          <div className="spinner border-3 border-primary/20 border-t-primary rounded-full w-10 h-10 animate-spin" />
+          <p className="text-sm font-semibold text-slate-500">Connecting to Vercel KV...</p>
         </div>
       )}
 
@@ -118,81 +127,42 @@ export default function LeadDashboard() {
             <div className="hidden md:flex items-center gap-1 border-l border-primary/20 pl-6 ml-2">
               <label className="relative flex items-center">
                 <span className="material-symbols-outlined absolute left-3 text-slate-400" style={{ fontSize: '18px' }}>search</span>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-10 w-80 rounded-lg border border-primary/15 bg-primary/5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/40 focus:border-primary/40 outline-none transition-all"
-                  placeholder="Search leads, domains, phone..."
-                />
+                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-10 w-80 rounded-lg border border-primary/15 bg-primary/5 pl-10 pr-4 text-sm outline-none" placeholder="Search leads, domains..." />
               </label>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className={`sync-dot w-2 h-2 rounded-full inline-block ${syncStatus === 'synced' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
-              <span>{syncStatus === 'synced' ? 'Synced' : syncStatus === 'syncing' ? 'Saving...' : 'Error'}</span>
+              <span className={`sync-dot w-2 h-2 rounded-full inline-block ${syncStatus === 'synced' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+              <span>{syncStatus === 'synced' ? 'Synced' : 'Saving...'}</span>
             </div>
-            <button
-              onClick={handleExport}
-              className="flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-bold text-white shadow-lg shadow-primary/25 hover:bg-primary/90 active:scale-95 transition-all"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>ios_share</span>
-              <span>Export Marked</span>
-            </button>
-            <div className="h-10 w-10 rounded-full border-2 border-primary/20 bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-              LF
-            </div>
+            <div className="h-10 w-10 rounded-full border-2 border-primary/20 bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">LF</div>
           </div>
         </header>
 
         <div className="flex flex-1">
-          <aside className={`hidden w-60 flex-col border-r border-primary/10 bg-white lg:flex flex-shrink-0 sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} style={{ padding: '16px 12px', transition: 'width 0.2s ease', width: sidebarCollapsed ? '56px' : '240px' }}>
-            <div className="flex items-center justify-between mb-5 px-1">
-              {!sidebarCollapsed && <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 sidebar-section-title">Navigation</h3>}
-              <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="sidebar-toggle w-7 h-7 flex items-center justify-center rounded-lg hover:bg-primary/10 text-slate-400 hover:text-primary flex-shrink-0 mx-auto">
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-                  {sidebarCollapsed ? 'right_panel_close' : 'left_panel_close'}
-                </span>
+          <aside className={`hidden w-60 flex-col border-r border-primary/10 bg-white lg:flex flex-shrink-0 sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} style={{ width: sidebarCollapsed ? '56px' : '240px' }}>
+            <div className="flex items-center justify-between p-4">
+              <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="sidebar-toggle w-7 h-7 flex items-center justify-center rounded-lg hover:bg-primary/10 text-slate-400 hover:text-primary mx-auto">
+                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{sidebarCollapsed ? 'right_panel_close' : 'left_panel_close'}</span>
               </button>
             </div>
-            <div className="mb-6">
-              <nav className="flex flex-col gap-1">
-                {[
-                  { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
-                  { id: 'leads', icon: 'view_list', label: 'Lead Directory' },
-                  { id: 'outreach', icon: 'mail', label: 'Outreach' },
-                  { id: 'settings', icon: 'settings', label: 'Settings' }
-                ].map((item) => (
-                  <a
-                    key={item.id}
-                    href={`#${item.id}`}
-                    onClick={(e) => { e.preventDefault(); setActiveView(item.id); }}
-                    className={`flex items-center rounded-lg px-3 py-2.5 text-sm transition-colors ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${activeView === item.id ? 'bg-primary/10 text-primary font-semibold' : 'text-slate-500 hover:bg-primary/5 hover:text-primary'}`}
-                  >
+            <nav className="flex flex-col gap-1 px-3">
+                {[{ id: 'dashboard', icon: 'dashboard', label: 'Dashboard' }, { id: 'leads', icon: 'view_list', label: 'Lead Directory' }, { id: 'outreach', icon: 'mail', label: 'Outreach' }, { id: 'settings', icon: 'settings', label: 'Settings' }].map((item) => (
+                  <a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveView(item.id); }} className={`flex items-center rounded-lg px-3 py-2.5 text-sm transition-colors ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${activeView === item.id ? 'bg-primary/10 text-primary font-semibold' : 'text-slate-500 hover:bg-primary/5'}`}>
                     <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '18px' }}>{item.icon}</span>
                     {!sidebarCollapsed && <span>{item.label}</span>}
                   </a>
                 ))}
-              </nav>
-            </div>
+            </nav>
           </aside>
 
           <main className="flex-1 overflow-hidden flex flex-col bg-background-light">
-            {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} />}
-            {/* RECENTLY CHANGED: Passed dailyData and setDailyData to LeadTable so it can update the dashboard counts */}
-            {activeView === 'leads' && <LeadTable leads={leads} setLeads={setLeads} searchQuery={searchQuery} dailyData={dailyData} setDailyData={setDailyData} />}
-            {activeView === 'outreach' && <OutreachLog leads={leads} />}
-            {activeView === 'settings' && (
-              <SettingsPanel 
-                leads={leads} 
-                setLeads={setLeads} 
-                dailyData={dailyData} 
-                setDailyData={setDailyData} 
-                syncStatus={syncStatus} 
-                onForceSync={forceSync} 
-              />
-            )}
+            {/* NEW: Passed setIsCalOpen down to DashboardAnalytics */}
+            {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} onOpenCalendar={() => setIsCalOpen(true)} />}
+            {activeView === 'leads' && <LeadTable leads={leads} setLeads={(updated) => { setLeads(updated); syncToCloud(updated); }} searchQuery={searchQuery} dailyData={dailyData} setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d); }} />}
+            {activeView === 'outreach' && <OutreachLog leads={leads} outreachLog={outreachLog} setOutreachLog={(o) => { setOutreachLog(o); syncToCloud(leads, dailyData, o); }} />}
+            {activeView === 'settings' && <SettingsPanel leads={leads} setLeads={(updated) => { setLeads(updated); syncToCloud(updated); }} dailyData={dailyData} setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d); }} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData)} />}
           </main>
         </div>
       </div>

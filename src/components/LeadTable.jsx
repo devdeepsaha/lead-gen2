@@ -96,39 +96,26 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
     const logOutreach = () => {
       showToast("📋 Copied template for " + lead.name);
       
-      try {
-        const raw = localStorage.getItem("lf_outreach_log");
-        let currentLog = raw ? JSON.parse(raw) : [];
-        const actualTplKey = lead.status === 'build' ? 'build_no_demo' : lead.status === 'build_plus' ? 'build_demo' : lead.status;
-        
-        currentLog.unshift({
-          id: lead.id,
-          name: lead.name,
-          category: lead.category || "",
-          tplKey: actualTplKey,
-          ts: Date.now()
-        });
-        
-        localStorage.setItem("lf_outreach_log", JSON.stringify(currentLog.slice(0, 500)));
+      const actualTplKey = lead.status === 'build' ? 'build_no_demo' : lead.status === 'build_plus' ? 'build_demo' : lead.status;
+      const newEntry = {
+        id: lead.id,
+        name: lead.name,
+        category: lead.category || "",
+        tplKey: actualTplKey,
+        ts: Date.now()
+      };
 
-        // Update the Dashboard Daily Rings!
-        setDailyData(prev => {
-          const today = new Date().toISOString().split('T')[0];
-          const isToday = prev.date === today;
-          const newCounts = isToday ? { ...prev.counts } : { job: 0, build_no_demo: 0, build_demo: 0 };
-          
-          if (newCounts[actualTplKey] !== undefined) {
-            newCounts[actualTplKey]++;
-          }
+      // UPDATED: Push to the dashboard state which triggers the Cloud Sync
+      const newLog = [newEntry, ...outreachLog];
+      setOutreachLog(newLog);
 
-          const newData = { ...prev, date: today, counts: newCounts };
-          localStorage.setItem("lf_daily_v1", JSON.stringify(newData));
-          return newData;
-        });
-
-      } catch (e) {
-        console.error("Failed to save outreach log", e);
+      const today = new Date().toISOString().split('T')[0];
+      const newCounts = { ...dailyData.counts };
+      if (newCounts[actualTplKey] !== undefined) {
+        newCounts[actualTplKey]++;
       }
+      
+      setDailyData({ ...dailyData, date: today, counts: newCounts });
     };
 
     // Foolproof copy method (helps bypass local development permissions)

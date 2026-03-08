@@ -1,14 +1,19 @@
 import React, { useMemo } from 'react';
 
-// CHANGED: Passed leads and dailyData as props so the component automatically recalculates when they change
-export default function DashboardAnalytics({ leads, dailyData = { goal: 10, counts: { job: 0, build_no_demo: 0, build_demo: 0 } }, dataSource = "cloud" }) {
+// RECENTLY CHANGED: Added onOpenCalendar to props to handle the click event for the history modal
+export default function DashboardAnalytics({ 
+  leads, 
+  dailyData = { goal: 10, counts: { job: 0, build_no_demo: 0, build_demo: 0 } }, 
+  dataSource = "cloud",
+  onOpenCalendar 
+}) {
   
-  // CHANGED: Replaced imperative updateStats() with useMemo to derive stats directly from the leads array
+  // Derives all numerical stats from the leads array
   const stats = useMemo(() => {
     const job = leads.filter(l => l.status === "job").length;
     const build = leads.filter(l => l.status === "build").length;
     const buildPlus = leads.filter(l => l.status === "build_plus").length;
-    const skip = leads.filter(l => l.status === "none").length; // In original, 'none' was skip
+    const skip = leads.filter(l => l.status === "none").length;
     const dismissed = leads.filter(l => l.status === "dismissed").length;
     const replied = leads.filter(l => l.replied).length;
 
@@ -21,7 +26,7 @@ export default function DashboardAnalytics({ leads, dailyData = { goal: 10, coun
     return { job, build, buildPlus, skip, dismissed, free, tagged, total, unset, pct, replied };
   }, [leads]);
 
-  // CHANGED: Derived top categories directly for React rendering
+  // Derives Top 8 Categories
   const topCategories = useMemo(() => {
     const counts = {};
     leads.forEach(l => { counts[l.category] = (counts[l.category] || 0) + 1; });
@@ -29,10 +34,11 @@ export default function DashboardAnalytics({ leads, dailyData = { goal: 10, coun
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8);
   }, [leads]);
+  
   const catMax = topCategories[0] ? topCategories[0][1] : 1;
   const catColors = ["#f94144", "#f3722c", "#f8961e", "#f9c74f", "#90be6d", "#43aa8b", "#4d908e", "#577590"];
 
-  // CHANGED: Derived rating distribution
+  // Derives Rating Bar Chart data
   const ratings = useMemo(() => {
     const r45 = leads.filter((l) => l.rating >= 4.5).length;
     const r40 = leads.filter((l) => l.rating >= 4 && l.rating < 4.5).length;
@@ -47,7 +53,7 @@ export default function DashboardAnalytics({ leads, dailyData = { goal: 10, coun
     ].map(r => ({ ...r, heightPct: Math.round((r.count / max) * 100) }));
   }, [leads]);
 
-  // CHANGED: React-ified the SVG polar math for the Lighthouse Donut
+  // Polar math for the Tagging Progress Donut
   const donutPaths = useMemo(() => {
     if (!stats.total) return [];
     
@@ -67,7 +73,7 @@ export default function DashboardAnalytics({ leads, dailyData = { goal: 10, coun
     const active = data.filter((s) => s.count > 0);
     if (!active.length) return [];
     if (active.length === 1) {
-      return [{ d: null, singleColor: active[0].color }]; // Special case for 100% one type
+      return [{ d: null, singleColor: active[0].color }]; 
     }
 
     const gapAngle = 2, minAngle = 8;
@@ -102,7 +108,6 @@ export default function DashboardAnalytics({ leads, dailyData = { goal: 10, coun
     });
   }, [stats]);
 
-  // Derived Daily Data
   const dailyTotal = (dailyData.counts.job || 0) + (dailyData.counts.build_no_demo || 0) + (dailyData.counts.build_demo || 0);
   const dailyPct = Math.min(100, Math.round((dailyTotal / dailyData.goal) * 100));
 
@@ -115,7 +120,7 @@ export default function DashboardAnalytics({ leads, dailyData = { goal: 10, coun
         </p>
       </div>
 
-      {/* Stat cards */}
+      {/* Primary Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
           <p className="text-slate-500 text-xs font-medium">Total Leads</p>
@@ -162,14 +167,13 @@ export default function DashboardAnalytics({ leads, dailyData = { goal: 10, coun
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-        {/* Lighthouse-style donut */}
+        {/* Progress Donut Chart */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col">
           <h3 className="text-base font-bold mb-3">Tagging Progress</h3>
           <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="lh-wrap" style={{ width: '160px', height: '160px' }}>
+            <div className="lh-wrap relative" style={{ width: '160px', height: '160px' }}>
               <svg width="160" height="160" viewBox="0 0 160 160">
                 <circle cx="80" cy="80" r="60" fill="none" stroke="#1e293b10" strokeWidth="16" />
-                {/* CHANGED: Dynamic paths based on the derived math */}
                 {donutPaths.map((p, i) => (
                   p.singleColor ? 
                     <circle key={i} cx="80" cy="80" r="60" fill="none" stroke={p.singleColor} strokeWidth="16" /> :
@@ -193,9 +197,14 @@ export default function DashboardAnalytics({ leads, dailyData = { goal: 10, coun
           </div>
         </div>
 
-        {/* Daily sent counter + category chart */}
+        {/* Daily Progress & Categories */}
         <div className="lg:col-span-2 flex flex-col gap-5">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all group" title="Click to view full outreach history">
+          {/* Daily Outreach Card with onOpenCalendar link */}
+          <div 
+            className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all group" 
+            onClick={onOpenCalendar}
+            title="Click to view full outreach history"
+          >
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-base font-bold group-hover:text-primary transition-colors">Daily Outreach</h3>
