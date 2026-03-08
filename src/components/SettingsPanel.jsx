@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", setLeads, dailyData, setDailyData, syncStatus, onForceSync }) {
+export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyData, setDailyData, syncStatus, onForceSync }) {
   const [goalInput, setGoalInput] = useState(dailyData.goal || 10);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState({ msg: '', type: '' });
@@ -96,51 +96,43 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         
         setUploadStatus({ msg: `Parsed ${parsed.length} rows — updating database...`, type: 'loading' });
         
-        // Smart merge logic: update existing leads with new data while preserving statuses
         const existingMap = new Map(leads.map(l => [l.id, l]));
         let addedCount = 0;
         let updatedCount = 0;
 
         parsed.forEach(parsedLead => {
           if (existingMap.has(parsedLead.id)) {
-            // It exists! Update it with new data (like lat/lng) but PRESERVE the status tags
             const existingLead = existingMap.get(parsedLead.id);
             existingMap.set(parsedLead.id, {
-              ...existingLead,             // Keep existing base data
-              ...parsedLead,               // Overwrite with new CSV data (pulls in the new lat/lng)
-              status: existingLead.status, // Strictly keep the user's manual tagging
+              ...existingLead,             
+              ...parsedLead,               
+              status: existingLead.status, 
               replied: existingLead.replied, 
               checked: existingLead.checked
             });
             updatedCount++;
           } else {
-            // It doesn't exist, add it as a new lead
             existingMap.set(parsedLead.id, parsedLead);
             addedCount++;
           }
         });
         
-        // Convert map back to array
         const newLeadsArray = Array.from(existingMap.values());
         
         // 1. Update the UI instantly
         setLeads(newLeadsArray); 
         
-        // 2. Save the enriched base data (with Lat/Lng) to the Vercel KV cloud
+        // RECENTLY CHANGED: Sending raw array (JSON.stringify(newLeadsArray)) exactly like your original code to fix the 400 Bad Request
         const res = await fetch('/api/leads', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            auth: adminKey,          // Secure the upload
-            leads: newLeadsArray     // Pushing the full enriched array to the database
-          })
+          body: JSON.stringify(newLeadsArray) 
         });
 
-        if (res.status === 401) throw new Error("Unauthorized Admin Key. Check your API settings.");
-        if (!res.ok) throw new Error("Server failed to save base leads to the cloud.");
+        if (!res.ok) throw new Error(`Server returned ${res.status} Bad Request`);
 
         setUploadStatus({ 
-          msg: `✅ Success! Added ${addedCount} new leads and enriched ${updatedCount} existing leads. Map data saved to cloud.`, 
+          msg: `✅ Success! Added ${addedCount} new leads and enriched ${updatedCount} existing leads with Map Data!`, 
           type: 'success' 
         });
         
