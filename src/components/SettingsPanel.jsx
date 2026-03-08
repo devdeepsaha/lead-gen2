@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyData, setDailyData, syncStatus, onForceSync }) {
+export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", setLeads, dailyData, setDailyData, syncStatus, onForceSync }) {
   const [goalInput, setGoalInput] = useState(dailyData.goal || 10);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState({ msg: '', type: '' });
@@ -94,7 +94,7 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
         const parsed = parseCSV(e.target.result);
         if (!parsed.length) throw new Error("No valid rows found in CSV");
         
-        setUploadStatus({ msg: `Parsed ${parsed.length} rows — updating database...`, type: 'loading' });
+        setUploadStatus({ msg: `Parsed ${parsed.length} rows — merging data...`, type: 'loading' });
         
         const existingMap = new Map(leads.map(l => [l.id, l]));
         let addedCount = 0;
@@ -118,21 +118,19 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
         });
         
         const newLeadsArray = Array.from(existingMap.values());
-        
-        // 1. Update the UI instantly
         setLeads(newLeadsArray); 
+
+        const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(newLeadsArray, null, 2)};\n\nexport default FALLBACK_LEADS;`;
+        const blob = new Blob([fileContent], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'fallback-leads.js';
+        a.click();
+        URL.revokeObjectURL(url);
         
-        // RECENTLY CHANGED: Sending raw array (JSON.stringify(newLeadsArray)) exactly like your original code to fix the 400 Bad Request
-        const res = await fetch('/api/leads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newLeadsArray) 
-        });
-
-        if (!res.ok) throw new Error(`Server returned ${res.status} Bad Request`);
-
         setUploadStatus({ 
-          msg: `✅ Success! Added ${addedCount} new leads and enriched ${updatedCount} existing leads with Map Data!`, 
+          msg: `✅ Map coordinates merged! "fallback-leads.js" was downloaded. Replace your existing file in /src/data to save permanently.`, 
           type: 'success' 
         });
         
@@ -143,29 +141,17 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
     reader.readAsText(file, "utf-8");
   };
 
-  const handleDragOver = (e) => { 
-    e.preventDefault(); 
-    if (isAdmin) setIsDragging(true); 
-  };
-  
-  const handleDragLeave = (e) => { 
-    e.preventDefault(); 
-    setIsDragging(false); 
-  };
-  
+  const handleDragOver = (e) => { e.preventDefault(); if (isAdmin) setIsDragging(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    if (!isAdmin) {
-      setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
-      return;
-    }
+    if (!isAdmin) return setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
     handleFile(e.dataTransfer.files[0]);
   };
 
   const saveDailyGoal = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to change the daily goal.");
-    
     const val = Math.max(1, Math.min(200, goalInput));
     const newDaily = { ...dailyData, goal: val };
     setDailyData(newDaily);
@@ -174,7 +160,6 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
 
   const downloadStatusBackup = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to download database backups.");
-    
     const map = {};
     leads.forEach((l) => { map[l.id] = l.status; });
     const a = document.createElement("a");
@@ -183,18 +168,70 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
     a.click();
   };
 
+  // RECENTLY CHANGED: Smart Deduplication function to clean up messes
+  const handleSmartCleanup = () => {
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode to clean the database.");
+    if (!window.confirm("This will scan for duplicates. It will MERGE new contact info (phones/emails) with your OLD manual tags, and delete the extra duplicate rows. Proceed?")) return;
+
+    const uniqueMap = new Map();
+    let removedCount = 0;
+
+    leads.forEach(lead => {
+      // Use the business name as the strict identifier for duplicates
+      const key = lead.name.toLowerCase().trim();
+      
+      if (uniqueMap.has(key)) {
+        removedCount++;
+        const existing = uniqueMap.get(key);
+
+        // SMART MERGE LOGIC:
+        // 1. Keep the manual status if it exists. If the old one is 'none' but the duplicate was tagged, keep the tag.
+        let bestStatus = existing.status;
+        if (existing.status === 'none' && lead.status !== 'none') bestStatus = lead.status;
+
+        // 2. Merge contact details (if the new duplicate has a phone number, keep it!)
+        uniqueMap.set(key, {
+          ...existing,
+          status: bestStatus,
+          replied: existing.replied || lead.replied,
+          phone: existing.phone || lead.phone,
+          email: existing.email || lead.email,
+          lat: existing.lat || lead.lat,
+          lng: existing.lng || lead.lng
+        });
+      } else {
+        uniqueMap.set(key, { ...lead });
+      }
+    });
+
+    const cleanedLeads = Array.from(uniqueMap.values());
+    
+    // Instantly update the UI
+    setLeads(cleanedLeads);
+
+    // Generate and download the cleaned file so the user can permanently save the fix
+    const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleanedLeads, null, 2)};\n\nexport default FALLBACK_LEADS;`;
+    const blob = new Blob([fileContent], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'fallback-leads-cleaned.js';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    alert(`🧹 Cleanup complete! Removed ${removedCount} duplicates.\n\nYour manual tags were saved and new contact numbers were merged. \n\nPlease replace your local "fallback-leads.js" with the downloaded file.`);
+  };
+
   const resetAllStatuses = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to reset statuses.");
     if (!window.confirm("Reset ALL status tags on all devices? This will wipe your progress.")) return;
-    
     const newLeads = leads.map(l => ({ ...l, status: 'none', replied: false }));
     setLeads(newLeads);
   };
 
   const resetLeadsData = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to wipe the database.");
-    if (!window.confirm("Wipe ALL leads from cloud? This removes them entirely and cannot be undone.")) return;
-    
+    if (!window.confirm("Wipe ALL leads from memory? This removes them entirely and cannot be undone.")) return;
     setLeads([]);
   };
 
@@ -218,7 +255,7 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
               <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
               <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich existing leads (like adding map coordinates) or add new ones. Your manual status tags are preserved.</p>
             </div>
-            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Cloud Upload</span>
+            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Developer Flow</span>
           </div>
           
           <div 
@@ -242,48 +279,24 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
           )}
         </div>
 
-        {/* Daily Goal */}
+        {/* Sync & Backup */}
         <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
-          <h3 className="font-bold text-sm mb-1">Daily Outreach Goal</h3>
-          <p className="text-xs text-slate-400 mb-3">Set your daily target for outreach messages sent.</p>
-          <div className="flex items-center gap-3">
-            <input 
-              type="number" 
-              min="1" max="200" 
-              value={goalInput} 
-              onChange={(e) => setGoalInput(parseInt(e.target.value) || 1)}
-              disabled={!isAdmin}
-              className={`w-20 h-9 rounded-lg border border-primary/20 px-3 text-sm font-bold text-slate-700 outline-none focus:border-primary/50 ${!isAdmin ? 'bg-slate-50 text-slate-400 cursor-not-allowed' : ''}`} 
-            />
-            <button onClick={saveDailyGoal} disabled={!isAdmin} className={`px-4 py-2 rounded-lg text-white text-sm font-bold transition-all ${isAdmin ? 'bg-primary hover:bg-primary/90' : 'bg-slate-300 cursor-not-allowed'}`}>
-              Save Goal
+          <h3 className="font-bold text-sm mb-1">Data Management</h3>
+          <p className="text-xs text-slate-400 mb-4">Sync statuses to cloud or download backups.</p>
+          
+          <div className="flex flex-col gap-3">
+            <button onClick={onForceSync} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-primary/20 text-primary hover:bg-primary/5' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>sync</span> Force Cloud Sync
+            </button>
+            <button onClick={downloadStatusBackup} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span> Download Backup JSON
+            </button>
+            
+            {/* RECENTLY CHANGED: Smart Cleanup Button */}
+            <button onClick={handleSmartCleanup} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 mt-2 rounded-lg text-white text-sm font-bold transition-all ${isAdmin ? 'bg-blue-500 hover:bg-blue-600 shadow-md shadow-blue-500/20' : 'bg-slate-300 cursor-not-allowed'}`}>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>cleaning_services</span> Smart Deduplicate
             </button>
           </div>
-          <p className="text-[10px] text-slate-400 mt-2">
-            Today's count: <span className="font-bold text-primary">{(dailyData.counts.job || 0) + (dailyData.counts.build_no_demo || 0) + (dailyData.counts.build_demo || 0)}</span> sent
-          </p>
-        </div>
-
-        {/* Sync */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <h3 className="font-bold text-sm mb-1">Cloud Sync</h3>
-          <p className="text-xs text-slate-400 mb-3">Status tags and leads sync automatically to Vercel KV.</p>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full inline-block ${syncStatus === 'synced' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
-            <span className="text-sm font-semibold text-slate-700">{syncStatus === 'synced' ? 'All changes saved' : 'Syncing...'}</span>
-          </div>
-          <button onClick={onForceSync} disabled={!isAdmin} className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-primary/20 text-primary hover:bg-primary/5' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>sync</span> Force sync
-          </button>
-        </div>
-
-        {/* Backup / Stats */}
-        <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
-          <h3 className="font-bold text-sm mb-1">Backup Statuses</h3>
-          <p className="text-xs text-slate-400 mb-3">Download a JSON snapshot of all current tags.</p>
-          <button onClick={downloadStatusBackup} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-bold transition-all ${isAdmin ? 'bg-primary hover:bg-primary/90' : 'bg-slate-300 cursor-not-allowed'}`}>
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span> Download JSON
-          </button>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
@@ -292,7 +305,7 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
             <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
             <div className="flex justify-between"><span>Tagged</span><span className="font-bold text-emerald-600">{stats.tagged}</span></div>
             <div className="flex justify-between"><span>Categories</span><span className="font-bold text-slate-800">{stats.categories}</span></div>
-            <div className="flex justify-between"><span>Data source</span><span className="font-bold text-primary">Vercel KV Cloud</span></div>
+            <div className="flex justify-between"><span>Data source</span><span className="font-bold text-primary">Local JSON File</span></div>
           </div>
         </div>
 
@@ -305,7 +318,7 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete_forever</span> Reset all status tags
             </button>
             <button onClick={resetLeadsData} disabled={!isAdmin} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>database</span> Wipe leads from cloud
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>database</span> Wipe leads from memory
             </button>
           </div>
         </div>
