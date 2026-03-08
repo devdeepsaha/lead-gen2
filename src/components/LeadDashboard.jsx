@@ -62,8 +62,10 @@ export default function LeadDashboard() {
   }, []);
 
   const syncToCloud = async (updatedLeads, updatedDaily, updatedOutreach) => {
+    // RECENTLY CHANGED: Validation to prevent crashing if updatedLeads isn't an array
+    if (!Array.isArray(updatedLeads)) return;
+
     setSyncStatus('syncing');
-    
     const statuses = {};
     updatedLeads.forEach(l => {
       statuses[l.id] = { status: l.status, replied: l.replied };
@@ -80,16 +82,35 @@ export default function LeadDashboard() {
           statuses,
           daily: dailyToSync,
           outreach: outreachToSync,
-          history: {
-            [dailyToSync.date]: dailyToSync.counts
-          }
+          history: { [dailyToSync.date]: dailyToSync.counts }
         }),
       });
       setSyncStatus('synced');
-    } catch (e) {
-      console.error("Sync failed", e);
-      setSyncStatus('error');
+    } catch (e) { setSyncStatus('error'); }
+  };
+
+  // RECENTLY CHANGED: Added logic to delete instances and update daily counts
+  const handleDeleteOutreach = (timestamp) => {
+    const deletedEntry = outreachLog.find(e => e.ts === timestamp);
+    if (!deletedEntry) return;
+
+    const updatedLog = outreachLog.filter(e => e.ts !== timestamp);
+    
+    const today = new Date().toISOString().split('T')[0];
+    const entryDate = new Date(deletedEntry.ts).toISOString().split('T')[0];
+    
+    let updatedDaily = dailyData;
+    if (entryDate === today) {
+      const newCounts = { ...dailyData.counts };
+      if (newCounts[deletedEntry.tplKey] > 0) {
+        newCounts[deletedEntry.tplKey]--;
+      }
+      updatedDaily = { ...dailyData, counts: newCounts };
+      setDailyData(updatedDaily);
     }
+
+    setOutreachLog(updatedLog);
+    syncToCloud(leads, updatedDaily, updatedLog);
   };
 
   return (
@@ -97,7 +118,8 @@ export default function LeadDashboard() {
       <OutreachCalendar 
         isOpen={isCalOpen} 
         onClose={() => setIsCalOpen(false)} 
-        outreachLog={outreachLog} 
+        outreachLog={outreachLog}
+        onDeleteEntry={handleDeleteOutreach} // Linked to new function
       />
 
       {isLoading && (
@@ -119,12 +141,6 @@ export default function LeadDashboard() {
                 <span className="text-[10px] font-bold text-primary uppercase tracking-widest">CSV Enterprise</span>
               </div>
             </div>
-            <div className="hidden md:flex items-center gap-1 border-l border-primary/20 pl-6 ml-2">
-              <label className="relative flex items-center">
-                <span className="material-symbols-outlined absolute left-3 text-slate-400" style={{ fontSize: '18px' }}>search</span>
-                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-10 w-80 rounded-lg border border-primary/15 bg-primary/5 pl-10 pr-4 text-sm outline-none" placeholder="Search leads, domains..." />
-              </label>
-            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -137,12 +153,7 @@ export default function LeadDashboard() {
 
         <div className="flex flex-1">
           <aside className={`hidden w-60 flex-col border-r border-primary/10 bg-white lg:flex flex-shrink-0 sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} style={{ width: sidebarCollapsed ? '56px' : '240px' }}>
-            <div className="flex items-center justify-between p-4">
-              <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="sidebar-toggle w-7 h-7 flex items-center justify-center rounded-lg hover:bg-primary/10 text-slate-400 hover:text-primary mx-auto">
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{sidebarCollapsed ? 'right_panel_close' : 'left_panel_close'}</span>
-              </button>
-            </div>
-            <nav className="flex flex-col gap-1 px-3">
+            <nav className="flex flex-col gap-1 px-3 mt-4">
                 {[{ id: 'dashboard', icon: 'dashboard', label: 'Dashboard' }, { id: 'leads', icon: 'view_list', label: 'Lead Directory' }, { id: 'outreach', icon: 'mail', label: 'Outreach' }, { id: 'settings', icon: 'settings', label: 'Settings' }].map((item) => (
                   <a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveView(item.id); }} className={`flex items-center rounded-lg px-3 py-2.5 text-sm transition-colors ${sidebarCollapsed ? 'justify-center' : 'gap-3'} ${activeView === item.id ? 'bg-primary/10 text-primary font-semibold' : 'text-slate-500 hover:bg-primary/5'}`}>
                     <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '18px' }}>{item.icon}</span>
@@ -155,34 +166,24 @@ export default function LeadDashboard() {
           <main className="flex-1 overflow-hidden flex flex-col bg-background-light">
             {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} onOpenCalendar={() => setIsCalOpen(true)} />}
             
-            {/* CHANGED: Corrected props passed to LeadTable to include outreach states */}
             {activeView === 'leads' && (
-  <LeadTable 
-    leads={leads} 
-    setLeads={(updated) => {
-      // Use a functional update to ensure we always have the latest array
-      setLeads(prevLeads => {
-        const newLeads = typeof updated === 'function' ? updated(prevLeads) : updated;
-        // Only sync if we have a valid array
-        if (Array.isArray(newLeads)) {
-          syncToCloud(newLeads, dailyData, outreachLog);
-        }
-        return newLeads;
-      });
-    }} 
-    searchQuery={searchQuery} 
-    dailyData={dailyData} 
-    setDailyData={(d) => { 
-      setDailyData(d); 
-      syncToCloud(leads, d, outreachLog); 
-    }}
-    outreachLog={outreachLog} 
-    setOutreachLog={(o) => { 
-      setOutreachLog(o); 
-      syncToCloud(leads, dailyData, o); 
-    }}
-  />
-)}
+              <LeadTable 
+                leads={leads} 
+                setLeads={(updated) => {
+                  // RECENTLY CHANGED: Safe functional update to prevent TypeErrors
+                  setLeads(prev => {
+                    const next = typeof updated === 'function' ? updated(prev) : updated;
+                    syncToCloud(next, dailyData, outreachLog);
+                    return next;
+                  });
+                }} 
+                searchQuery={searchQuery} 
+                dailyData={dailyData} 
+                setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d, outreachLog); }}
+                outreachLog={outreachLog}
+                setOutreachLog={(o) => { setOutreachLog(o); syncToCloud(leads, dailyData, o); }}
+              />
+            )}
             
             {activeView === 'outreach' && <OutreachLog leads={leads} outreachLog={outreachLog} setOutreachLog={(o) => { setOutreachLog(o); syncToCloud(leads, dailyData, o); }} />}
             {activeView === 'settings' && <SettingsPanel leads={leads} setLeads={(updated) => { setLeads(updated); syncToCloud(updated); }} dailyData={dailyData} setDailyData={(d) => { setDailyData(d); syncToCloud(leads, d); }} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData)} />}
