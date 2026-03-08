@@ -48,6 +48,8 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
       address: idx(["Address", "address"]),
       rating: idx(["Rating", "rating"]),
       reviews: idx(["Reviews", "reviews", "review_count"]),
+      lat: idx(["Latitude", "lat", "latitude"]),
+      lng: idx(["Longitude", "lng", "lon", "longitude"]),
     };
     
     const results = [];
@@ -65,6 +67,8 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
         address: g(col.address),
         rating: parseFloat(g(col.rating)) || null,
         reviews: parseInt(g(col.reviews)) || null,
+        lat: parseFloat(g(col.lat)) || null,
+        lng: parseFloat(g(col.lng)) || null,
         status: 'none',
         replied: false,
         checked: false
@@ -74,7 +78,6 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
   };
 
   const handleFile = (file) => {
-    // RECENTLY CHANGED: Lock CSV upload
     if (!isAdmin) {
       setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
       return;
@@ -91,13 +94,40 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
         const parsed = parseCSV(e.target.result);
         if (!parsed.length) throw new Error("No valid rows found in CSV");
         
-        setUploadStatus({ msg: `Parsed ${parsed.length} rows — processing...`, type: 'loading' });
+        setUploadStatus({ msg: `Parsed ${parsed.length} rows — updating database...`, type: 'loading' });
         
-        const existingIds = new Set(leads.map(l => l.id));
-        const newLeads = parsed.filter(l => !existingIds.has(l.id));
+        // RECENTLY CHANGED: Smart merge logic instead of just skipping duplicates
+        const existingMap = new Map(leads.map(l => [l.id, l]));
+        let addedCount = 0;
+        let updatedCount = 0;
+
+        parsed.forEach(parsedLead => {
+          if (existingMap.has(parsedLead.id)) {
+            // It exists! Update it with new data (like lat/lng) but PRESERVE the status tags
+            const existingLead = existingMap.get(parsedLead.id);
+            existingMap.set(parsedLead.id, {
+              ...existingLead,             // Keep existing base data
+              ...parsedLead,               // Overwrite with new CSV data (pulls in the new lat/lng)
+              status: existingLead.status, // Strictly keep the user's manual tagging
+              replied: existingLead.replied, 
+              checked: existingLead.checked
+            });
+            updatedCount++;
+          } else {
+            // It doesn't exist, add it as a new lead
+            existingMap.set(parsedLead.id, parsedLead);
+            addedCount++;
+          }
+        });
         
-        setLeads([...leads, ...newLeads]); // Fixed to use direct array to prevent state lag
-        setUploadStatus({ msg: `✅ Done! Added ${newLeads.length} new leads · Skipped ${parsed.length - newLeads.length} duplicates`, type: 'success' });
+        // Convert map back to array and trigger save
+        const newLeadsArray = Array.from(existingMap.values());
+        setLeads(newLeadsArray); 
+        
+        setUploadStatus({ 
+          msg: `✅ Success! Added ${addedCount} new leads and enriched ${updatedCount} existing leads.`, 
+          type: 'success' 
+        });
         
       } catch (err) {
         setUploadStatus({ msg: `❌ Upload failed: ${err.message}`, type: 'error' });
@@ -127,7 +157,6 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
   };
 
   const saveDailyGoal = () => {
-    // RECENTLY CHANGED: Lock goal editing
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to change the daily goal.");
     
     const val = Math.max(1, Math.min(200, goalInput));
@@ -137,7 +166,6 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
   };
 
   const downloadStatusBackup = () => {
-    // RECENTLY CHANGED: Lock backup downloads
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to download database backups.");
     
     const map = {};
@@ -180,8 +208,8 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
         <div className={`md:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm transition-all ${!isAdmin ? 'opacity-60' : ''}`}>
           <div className="flex items-start justify-between mb-3">
             <div>
-              <h3 className="font-bold text-sm">Add New Leads from CSV</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Drop a new scrape CSV — duplicates are skipped automatically, existing statuses are untouched.</p>
+              <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich existing leads (like adding map coordinates) or add new ones. Your manual status tags are preserved.</p>
             </div>
             <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Cloud Upload</span>
           </div>
@@ -196,12 +224,12 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
           >
             <span className={`material-symbols-outlined block mb-2 ${isAdmin ? 'text-primary/40' : 'text-slate-300'}`} style={{ fontSize: '36px' }}>{isAdmin ? 'upload_file' : 'lock'}</span>
             <p className="text-sm font-semibold text-slate-500">Drop CSV here or <span className={isAdmin ? "text-primary" : ""}>click to browse</span></p>
-            <p className="text-[11px] text-slate-400 mt-1">Expects: Place ID, Business Name, Phone, Website, Emails, Category, Address, Rating, Reviews</p>
+            <p className="text-[11px] text-slate-400 mt-1">Expects: Place ID, Business Name, Phone, Website, Emails, Category, Address, Rating, Reviews, Latitude, Longitude</p>
             <input type="file" id="csv-file-input" accept=".csv" className="hidden" onChange={(e) => handleFile(e.target.files[0])} disabled={!isAdmin} />
           </div>
           
           {uploadStatus.msg && (
-            <div className={`mt-3 p-3 rounded-lg text-sm ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700' : uploadStatus.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600'}`}>
+            <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : uploadStatus.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
               {uploadStatus.msg}
             </div>
           )}

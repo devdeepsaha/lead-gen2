@@ -10,17 +10,14 @@ export default function LeadTableControls({
   const [sortDropOpen, setSortDropOpen] = useState(false);
   const [filterDropOpen, setFilterDropOpen] = useState(false); 
 
-  // Max cap for the review slider (anything above this is treated as infinity)
   const MAX_REVIEWS_SLIDER = 5000;
 
-  // Safe handler to ensure min never crosses max
   const handleRangeChange = (key, value) => {
     let parsed = parseFloat(value);
     if (isNaN(parsed)) parsed = 0;
     
     setRangeFilters(prev => {
       let next = { ...prev, [key]: parsed };
-      // Prevent sliders from crossing over each other
       if (key === 'ratingMin' && next.ratingMin > next.ratingMax) next.ratingMax = next.ratingMin;
       if (key === 'ratingMax' && next.ratingMax < next.ratingMin) next.ratingMin = next.ratingMax;
       if (key === 'reviewsMin' && next.reviewsMin > next.reviewsMax) next.reviewsMax = next.reviewsMin;
@@ -43,7 +40,6 @@ export default function LeadTableControls({
   return (
     <div className="px-4 md:px-6 py-3 md:py-4 bg-white md:border-b border-primary/10 sticky top-0 z-20 shadow-sm md:shadow-none">
       
-      {/* Mobile Search Bar */}
       <div className="md:hidden flex items-stretch rounded-xl shadow-sm h-11 mb-3">
         <div className="flex items-center justify-center pl-4 bg-white rounded-l-xl border border-r-0 border-primary/15">
           <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '18px' }}>search</span>
@@ -96,7 +92,6 @@ export default function LeadTableControls({
 
           <div className="flex gap-2">
             
-            {/* DRAGGABLE RANGE FILTERS */}
             <div className="relative flex-1 md:flex-none">
               <button onClick={() => { setFilterDropOpen(!filterDropOpen); setCatDropOpen(false); setSortDropOpen(false); }} className={`w-full flex items-center justify-between md:justify-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-semibold transition-all ${isFilterActive ? 'border-primary bg-primary/10 text-primary' : 'border-primary/15 bg-white hover:border-primary/40'}`}>
                 <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>tune</span>
@@ -105,7 +100,8 @@ export default function LeadTableControls({
               </button>
 
               {filterDropOpen && (
-                <div className="absolute top-full right-0 md:left-0 mt-1 z-50 w-[280px] bg-white border border-primary/15 rounded-xl shadow-xl p-4 cursor-default">
+                // RECENTLY CHANGED: Set to `left-0` with a max-width safeguard so it never bleeds off phone screens
+                <div className="absolute top-full left-0 mt-1 z-50 w-[280px] max-w-[85vw] bg-white border border-primary/15 rounded-xl shadow-xl p-4 cursor-default">
                   
                   <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
                     <h4 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
@@ -115,7 +111,6 @@ export default function LeadTableControls({
                     <button onClick={() => applyQuickFilter('reset')} className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors">Reset All</button>
                   </div>
 
-                  {/* Rating Slider Group */}
                   <div className="mb-5 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex justify-between items-center mb-3">
                       <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
@@ -137,7 +132,6 @@ export default function LeadTableControls({
                     </div>
                   </div>
 
-                  {/* Reviews Slider Group */}
                   <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex justify-between items-center mb-3">
                       <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
@@ -159,7 +153,6 @@ export default function LeadTableControls({
                     </div>
                   </div>
 
-                  {/* Quick Chips */}
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
                     <button onClick={() => applyQuickFilter('high_rating')} className="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider rounded-md border border-emerald-100 hover:bg-emerald-100 transition-colors">4.5+ Stars</button>
                     <button onClick={() => applyQuickFilter('sweet_spot')} className="px-2.5 py-1.5 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider rounded-md border border-blue-100 hover:bg-blue-100 transition-colors">Sweet Spot</button>
@@ -176,7 +169,8 @@ export default function LeadTableControls({
                 <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>expand_more</span>
               </button>
               {catDropOpen && (
-                <div className="absolute top-full right-0 md:left-0 mt-1 z-50 min-w-[200px] max-h-80 overflow-y-auto bg-white border border-primary/15 rounded-xl shadow-lg">
+                // RECENTLY CHANGED: Mobile center alignment via -translate-x-1/2 ensures it stays perfectly on screen
+                <div className="absolute top-full left-1/2 -translate-x-1/2 md:translate-x-0 md:left-0 mt-1 z-50 min-w-[200px] max-h-80 overflow-y-auto bg-white border border-primary/15 rounded-xl shadow-lg">
                   <div onClick={() => { setCatFilter('all'); setCatDropOpen(false); setPage(1); }} className={`p-2 text-sm cursor-pointer flex justify-between ${catFilter === 'all' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-primary/5'}`}>
                     All Categories <span className="opacity-50 text-xs">{totalLeads}</span>
                   </div>
@@ -196,6 +190,7 @@ export default function LeadTableControls({
                 <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>expand_more</span>
               </button>
               {sortDropOpen && (
+                // RECENTLY CHANGED: Right alignment prevents overflow on the right side
                 <div className="absolute top-full right-0 mt-1 z-50 w-48 bg-white border border-primary/15 rounded-xl shadow-lg flex flex-col p-1 text-sm">
                   {[{ id: 'default', label: 'Default Order' }, { id: 'name_asc', label: 'Name A → Z' }, { id: 'rating_desc', label: 'Highest Rated' }, { id: 'reviews_desc', label: 'Most Reviews' }, { id: 'cat_name', label: 'Category → Name' }].map(opt => (
                     <button key={opt.id} onClick={() => { setSortType(opt.id); setSortDropOpen(false); setPage(1); }} className={`text-left px-3 py-2 rounded-lg ${sortType === opt.id ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-primary/5'}`}>{opt.label}</button>

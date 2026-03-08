@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
 export default function DashboardAnalytics({ 
   leads, 
@@ -19,7 +21,6 @@ export default function DashboardAnalytics({
     const tagged = job + free;
     const total = leads.length;
     
-    // FIXED: Untagged strictly counts leads with "none" status
     const unset = skip; 
     const pct = total ? Math.round((tagged / total) * 100) : 0;
 
@@ -34,20 +35,6 @@ export default function DashboardAnalytics({
   
   const catMax = topCategories[0] ? topCategories[0][1] : 1;
   const catColors = ["#f94144", "#f3722c", "#f8961e", "#f9c74f", "#90be6d", "#43aa8b", "#4d908e", "#577590"];
-
-  const ratings = useMemo(() => {
-    const r45 = leads.filter((l) => l.rating >= 4.5).length;
-    const r40 = leads.filter((l) => l.rating >= 4 && l.rating < 4.5).length;
-    const r35 = leads.filter((l) => l.rating >= 3.5 && l.rating < 4).length;
-    const rLow = leads.filter((l) => l.rating > 0 && l.rating < 3.5).length;
-    const max = Math.max(r45, r40, r35, rLow, 1);
-    return [
-      { count: r45, color: "#10b981", label: "4.5+" },
-      { count: r40, color: "#9855f6", label: "4.0+" },
-      { count: r35, color: "#f59e0b", label: "3.5+" },
-      { count: rLow, color: "#ef4444", label: "<3.5" },
-    ].map(r => ({ ...r, heightPct: Math.round((r.count / max) * 100) }));
-  }, [leads]);
 
   const donutPaths = useMemo(() => {
     if (!stats.total) return [];
@@ -99,6 +86,20 @@ export default function DashboardAnalytics({
 
   const dailyTotal = (dailyData.counts.job || 0) + (dailyData.counts.build_no_demo || 0) + (dailyData.counts.build_demo || 0);
   const dailyPct = Math.min(100, Math.round((dailyTotal / dailyData.goal) * 100));
+
+  const mappableLeads = useMemo(() => {
+    return leads.filter(l => l.lat && l.lng && !isNaN(l.lat) && !isNaN(l.lng));
+  }, [leads]);
+
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'job': return '#10b981'; 
+      case 'build': return '#9855f6'; 
+      case 'build_plus': return '#3b82f6'; 
+      case 'dismissed': return '#ef4444'; 
+      default: return '#94a3b8'; 
+    }
+  };
 
   return (
     <div id="view-dashboard" className="flex-1 p-4 lg:p-6 overflow-y-auto flex flex-col">
@@ -167,6 +168,7 @@ export default function DashboardAnalytics({
                     <path key={i} d={p.d} fill="none" stroke={p.color} strokeWidth={p.strokeWidth} strokeLinecap="butt" />
                 ))}
               </svg>
+              {/* RECENTLY CHANGED: Fixed justify-content to justifyContent to prevent the TS 1005 Error */}
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px', pointerEvents: 'none' }}>
                 <span style={{ fontSize: '22px', fontWeight: 900, color: '#1e293b', lineHeight: 1 }}>{stats.pct}%</span>
                 <span style={{ fontSize: '10px', fontWeight: 600, color: '#94a3b8' }}>Tagged</span>
@@ -210,7 +212,7 @@ export default function DashboardAnalytics({
                 <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#9855f6' }}></span>Build</span><span className="font-bold text-slate-700">{dailyData.counts.build_no_demo || 0}</span></div>
                 <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-bold text-slate-700">{dailyData.counts.build_demo || 0}</span></div>
                 <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${dailyPct}%` }}></div>
+                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: dailyPct + '%' }}></div>
                 </div>
               </div>
             </div>
@@ -229,7 +231,7 @@ export default function DashboardAnalytics({
                     <span className="font-bold text-slate-600 ml-2">{count}</span>
                   </div>
                   <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                    <div className="bar-fill h-full rounded-full" style={{ width: `${Math.round((count / catMax) * 100)}%`, background: catColors[i % catColors.length] }}></div>
+                    <div className="bar-fill h-full rounded-full" style={{ width: Math.round((count / catMax) * 100) + '%', backgroundColor: catColors[i % catColors.length] }}></div>
                   </div>
                 </div>
               ))}
@@ -237,6 +239,63 @@ export default function DashboardAnalytics({
           </div>
         </div>
       </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-4">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white z-10">
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Geographic Distribution</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{mappableLeads.length} leads with location data</p>
+          </div>
+          <span className="material-symbols-outlined text-slate-300">public</span>
+        </div>
+        
+        <div className="w-full h-[300px] lg:h-[400px] relative z-0">
+          {mappableLeads.length > 0 ? (
+            <MapContainer 
+              center={[mappableLeads[0].lat, mappableLeads[0].lng]} 
+              zoom={5} 
+              scrollWheelZoom={false}
+              style={{ height: '100%', width: '100%', zIndex: 0 }}
+            >
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
+              />
+              
+              {mappableLeads.map(l => (
+                <CircleMarker 
+                  key={l.id} 
+                  center={[l.lat, l.lng]} 
+                  radius={6} 
+                  pathOptions={{ 
+                    color: getStatusColor(l.status), 
+                    fillColor: getStatusColor(l.status), 
+                    fillOpacity: 0.8,
+                    weight: 2
+                  }}
+                >
+                  <Popup className="rounded-lg">
+                    <div className="font-display">
+                      <p className="font-bold text-slate-800 text-sm mb-1">{l.name}</p>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">{l.category}</p>
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase" style={{ backgroundColor: getStatusColor(l.status) }}>
+                        {l.status === 'none' ? 'Untagged' : l.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              ))}
+            </MapContainer>
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+              <span className="material-symbols-outlined text-4xl mb-2 opacity-50">location_off</span>
+              <p className="text-sm font-semibold">No location data found</p>
+              <p className="text-xs max-w-xs text-center mt-1">Upload a CSV containing Latitude and Longitude columns to view the map.</p>
+            </div>
+          )}
+        </div>
+      </div>
+      
     </div>
   );
 }
