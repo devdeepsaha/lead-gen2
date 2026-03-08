@@ -13,16 +13,52 @@ const TEMPLATES = {
     }
   },
   whatsapp: {
-    job: {
-      build: (name) => `Hey ${name} team 👋 I'm Devdeep, a final-year CSE student & creative web developer.\n\nI love building aesthetic, high-performance websites where design and logic meet. Would love to connect if you're looking for someone who can think visually and execute technically!\n\nCheck out my work: https://devdeepsahaportfolio.vercel.app/\n\nLet me know if you're open to a quick chat! 🚀`
-    },
-    build: {
-      build: (name) => `Hey ${name} team! 👋 I'm Devdeep, a freelance web developer.\n\nI help businesses build super clean, fast, and modern websites. I'd love to help out if you're ever looking to upgrade your digital presence or improve your user experience.\n\nCheck out my work here: https://devwebstudio.vercel.app/\n\nLet's connect! 🚀`
-    },
-    build_plus: {
-      build: (name) => `Hey ${name} team 👋 I checked out your site and noticed a huge opportunity to modernize the design and user experience!\n\nI actually created a quick homepage concept for you to show what I mean (see attached image 📎). I specialize in high-performance web revamps that look clean and modern.\n\nTake a look at my portfolio: https://devwebstudio.vercel.app/\n\nWould love to chat if you're open to upgrading your site! 🚀`
-    }
+  job: {
+    build: (name) => 
+`Hi ${name} team 👋
+
+My name is Devdeep. I'm a web developer who enjoys building design-focused websites and interactive web experiences.
+
+I recently came across your work and thought I'd reach out to see if you're open to collaborating with freelance developers.
+
+Here's a quick look at some of my work:
+https://devdeepsahaportfolio.vercel.app/
+
+Would love to connect if that sounds relevant 🙂`
+  },
+
+  build: {
+    build: (name) => 
+`Hi ${name} 👋
+
+I was just checking out your business online and noticed you don't seem to have a dedicated website yet (or it could use a small refresh).
+
+I'm Devdeep, a freelance developer who helps businesses build clean, modern websites that load fast and look professional.
+
+If you're ever considering improving your online presence, I'd be happy to help.
+
+You can see some of my work here:
+https://devwebstudio.vercel.app/
+
+No pressure at all — just thought I'd reach out 🙂`
+  },
+
+  build_plus: {
+    build: (name) => 
+`Hi ${name} 👋
+
+I came across your website and had a few ideas on how the homepage could look more modern and structured.
+
+Just for fun, I actually drafted a quick visual concept for how it could look (I'll attach it here).
+
+I'm a freelance web developer who focuses on clean design and fast, performance-optimized websites.
+
+If you're curious to explore the idea further, feel free to check my work:
+https://devwebstudio.vercel.app/
+
+Happy to share a few suggestions if you're interested 🙂`
   }
+}
 };
 
 export default function LeadTable({ 
