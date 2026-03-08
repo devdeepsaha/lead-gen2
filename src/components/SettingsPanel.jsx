@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyData, setDailyData, syncStatus, onForceSync }) {
+export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", setLeads, dailyData, setDailyData, syncStatus, onForceSync }) {
   const [goalInput, setGoalInput] = useState(dailyData.goal || 10);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState({ msg: '', type: '' });
@@ -96,7 +96,7 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
         
         setUploadStatus({ msg: `Parsed ${parsed.length} rows — updating database...`, type: 'loading' });
         
-        // RECENTLY CHANGED: Smart merge logic instead of just skipping duplicates
+        // Smart merge logic: update existing leads with new data while preserving statuses
         const existingMap = new Map(leads.map(l => [l.id, l]));
         let addedCount = 0;
         let updatedCount = 0;
@@ -120,12 +120,27 @@ export default function SettingsPanel({ leads, isAdmin = false, setLeads, dailyD
           }
         });
         
-        // Convert map back to array and trigger save
+        // Convert map back to array
         const newLeadsArray = Array.from(existingMap.values());
+        
+        // 1. Update the UI instantly
         setLeads(newLeadsArray); 
         
+        // 2. Save the enriched base data (with Lat/Lng) to the Vercel KV cloud
+        const res = await fetch('/api/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            auth: adminKey,          // Secure the upload
+            leads: newLeadsArray     // Pushing the full enriched array to the database
+          })
+        });
+
+        if (res.status === 401) throw new Error("Unauthorized Admin Key. Check your API settings.");
+        if (!res.ok) throw new Error("Server failed to save base leads to the cloud.");
+
         setUploadStatus({ 
-          msg: `✅ Success! Added ${addedCount} new leads and enriched ${updatedCount} existing leads.`, 
+          msg: `✅ Success! Added ${addedCount} new leads and enriched ${updatedCount} existing leads. Map data saved to cloud.`, 
           type: 'success' 
         });
         

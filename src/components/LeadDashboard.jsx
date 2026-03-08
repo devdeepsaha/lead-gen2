@@ -245,7 +245,7 @@ export default function LeadDashboard() {
           )}
           
           {activeView === 'outreach' && <OutreachLog leads={leads} outreachLog={outreachLog} setOutreachLog={handleUpdateOutreach} />}
-          {activeView === 'settings' && <SettingsPanel leads={leads} isAdmin={isAdmin} setLeads={handleUpdateLeads} dailyData={dailyData} setDailyData={handleUpdateDaily} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData, outreachLog, adminKey)} />}
+          {activeView === 'settings' && <SettingsPanel leads={leads} isAdmin={isAdmin} adminKey={adminKey} setLeads={handleUpdateLeads} dailyData={dailyData} setDailyData={handleUpdateDaily} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData, outreachLog, adminKey)} />}
         </main>
 
         <nav className="lg:hidden absolute bottom-0 left-0 right-0 border-t border-primary/10 bg-white px-4 pb-safe pt-2 z-40 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
