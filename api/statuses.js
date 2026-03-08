@@ -1,31 +1,32 @@
 // api/statuses.js
 import { kv } from "@vercel/kv";
 
-const STATUS_KEY  = "leadflow:statuses";
-const OUTREACH_KEY= "leadflow:outreach";
-const DAILY_KEY   = "leadflow:daily";
-const HISTORY_KEY = "leadflow:daily_history"; // NEW: { "YYYY-MM-DD": { job, build_no_demo, build_demo } }
+const STATUS_KEY   = "leadflow:statuses";
+const OUTREACH_KEY = "leadflow:outreach";
+const DAILY_KEY    = "leadflow:daily";
+const HISTORY_KEY  = "leadflow:daily_history";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization"); // Added Authorization to headers
+  
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  // ── GET ──────────────────────────────────────────────────────────────────
+  // ── GET: Publicly accessible ──────────────────────────────────────────────
   if (req.method === "GET") {
     try {
       const [statuses, outreach, daily, history] = await Promise.all([
         kv.get(STATUS_KEY),
         kv.get(OUTREACH_KEY),
         kv.get(DAILY_KEY),
-        kv.get(HISTORY_KEY),   // NEW
+        kv.get(HISTORY_KEY),
       ]);
       return res.status(200).json({
         statuses: statuses || {},
         outreach: outreach || [],
         daily:    daily    || null,
-        history:  history  || {},  // NEW
+        history:  history  || {},
       });
     } catch (err) {
       console.error("KV GET error:", err);
@@ -33,28 +34,37 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── POST ─────────────────────────────────────────────────────────────────
+  // ── POST: Admin Lock Protected ────────────────────────────────────────────
   if (req.method === "POST") {
     try {
       const body = req.body;
+      
+      // RECENTLY CHANGED: Check for ADMIN_PASSWORD from Vercel Environment Variables
+      // We check the 'auth' field inside the body sent by LeadDashboard.jsx
+      if (body.auth !== process.env.ADMIN_PASSWORD) {
+        return res.status(401).json({ error: "Unauthorized: Invalid Admin Key" });
+      }
+
       if (typeof body !== "object" || Array.isArray(body))
         return res.status(400).json({ error: "Expected a JSON object" });
 
       const ops = [];
 
+      // Update Lead Statuses
       if (body.statuses !== undefined) {
         if (typeof body.statuses !== "object" || Array.isArray(body.statuses))
           return res.status(400).json({ error: "statuses must be an object" });
         ops.push(kv.set(STATUS_KEY, body.statuses));
       }
 
+      // Update Outreach Log
       if (body.outreach !== undefined) {
         if (!Array.isArray(body.outreach))
           return res.status(400).json({ error: "outreach must be an array" });
         ops.push(kv.set(OUTREACH_KEY, body.outreach.slice(0, 500)));
       }
 
-      // ── daily (today's counter + goal) ───────────────────────────────────
+      // Update Daily Stats
       if (body.daily !== undefined) {
         if (typeof body.daily !== "object" || Array.isArray(body.daily))
           return res.status(400).json({ error: "daily must be an object" });
@@ -83,9 +93,7 @@ export default async function handler(req, res) {
         }
         ops.push(kv.set(DAILY_KEY, toSave));
 
-        // ── NEW: also merge today into history ────────────────────────────
-        // We do a read-modify-write on the history object.
-        // Only update the date being pushed (never clobber other days).
+        // Merge today into history
         const existingHistory = await kv.get(HISTORY_KEY) || {};
         const prevDay = existingHistory[incomingDate] || { job: 0, build_no_demo: 0, build_demo: 0 };
         existingHistory[incomingDate] = {
@@ -96,11 +104,11 @@ export default async function handler(req, res) {
         ops.push(kv.set(HISTORY_KEY, existingHistory));
       }
 
-      // ── NEW: allow client to directly patch history (e.g. manual edits) ──
+      // Patch History directly (for deletions/edits)
       if (body.history !== undefined) {
         if (typeof body.history !== "object" || Array.isArray(body.history))
           return res.status(400).json({ error: "history must be an object" });
-        // Merge with existing rather than replace to be safe
+        
         const existingHistory = await kv.get(HISTORY_KEY) || {};
         const merged = { ...existingHistory };
         for (const [date, counts] of Object.entries(body.history)) {

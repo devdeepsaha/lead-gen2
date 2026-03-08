@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 
-// RECENTLY CHANGED: Added onOpenCalendar to props to handle the click event for the history modal
 export default function DashboardAnalytics({ 
   leads, 
   dailyData = { goal: 10, counts: { job: 0, build_no_demo: 0, build_demo: 0 } }, 
@@ -8,7 +7,6 @@ export default function DashboardAnalytics({
   onOpenCalendar 
 }) {
   
-  // Derives all numerical stats from the leads array
   const stats = useMemo(() => {
     const job = leads.filter(l => l.status === "job").length;
     const build = leads.filter(l => l.status === "build").length;
@@ -20,25 +18,23 @@ export default function DashboardAnalytics({
     const free = build + buildPlus;
     const tagged = job + free;
     const total = leads.length;
-    const unset = total - tagged - skip - dismissed;
+    
+    // FIXED: Untagged strictly counts leads with "none" status
+    const unset = skip; 
     const pct = total ? Math.round((tagged / total) * 100) : 0;
 
     return { job, build, buildPlus, skip, dismissed, free, tagged, total, unset, pct, replied };
   }, [leads]);
 
-  // Derives Top 8 Categories
   const topCategories = useMemo(() => {
     const counts = {};
     leads.forEach(l => { counts[l.category] = (counts[l.category] || 0) + 1; });
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
   }, [leads]);
   
   const catMax = topCategories[0] ? topCategories[0][1] : 1;
   const catColors = ["#f94144", "#f3722c", "#f8961e", "#f9c74f", "#90be6d", "#43aa8b", "#4d908e", "#577590"];
 
-  // Derives Rating Bar Chart data
   const ratings = useMemo(() => {
     const r45 = leads.filter((l) => l.rating >= 4.5).length;
     const r40 = leads.filter((l) => l.rating >= 4 && l.rating < 4.5).length;
@@ -53,10 +49,8 @@ export default function DashboardAnalytics({
     ].map(r => ({ ...r, heightPct: Math.round((r.count / max) * 100) }));
   }, [leads]);
 
-  // Polar math for the Tagging Progress Donut
   const donutPaths = useMemo(() => {
     if (!stats.total) return [];
-    
     const polarToCartesian = (cx, cy, r, angleDeg) => {
       const rad = ((angleDeg - 90) * Math.PI) / 180;
       return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
@@ -72,9 +66,7 @@ export default function DashboardAnalytics({
     
     const active = data.filter((s) => s.count > 0);
     if (!active.length) return [];
-    if (active.length === 1) {
-      return [{ d: null, singleColor: active[0].color }]; 
-    }
+    if (active.length === 1) return [{ d: null, singleColor: active[0].color }]; 
 
     const gapAngle = 2, minAngle = 8;
     const totalGaps = active.length * gapAngle;
@@ -83,10 +75,7 @@ export default function DashboardAnalytics({
     let totalBorrow = 0;
     
     angles = angles.map((a) => {
-      if (a < minAngle) {
-        totalBorrow += minAngle - a;
-        return minAngle;
-      }
+      if (a < minAngle) { totalBorrow += minAngle - a; return minAngle; }
       return a;
     });
 
@@ -112,46 +101,45 @@ export default function DashboardAnalytics({
   const dailyPct = Math.min(100, Math.round((dailyTotal / dailyData.goal) * 100));
 
   return (
-    <div id="view-dashboard" className="flex-1 p-6 overflow-y-auto" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div className="mb-5">
+    <div id="view-dashboard" className="flex-1 p-4 lg:p-6 overflow-y-auto flex flex-col">
+      <div className="mb-5 hidden lg:block">
         <h1 className="text-2xl font-black tracking-tight">Dashboard Analytics</h1>
         <p className="text-sm text-slate-500">
           <span className="font-semibold text-slate-700">{stats.total}</span> leads loaded · <span className="text-primary font-medium">from {dataSource}</span>
         </p>
       </div>
 
-      {/* Primary Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium">Total Leads</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Total</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black">{stats.total || '—'}</h3>
             <span className="text-emerald-500 text-[10px] font-bold bg-emerald-50 px-2 py-0.5 rounded-full">ALL</span>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium">Tagged</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Tagged</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black text-emerald-600">{stats.tagged}</h3>
             <span className="text-emerald-500 text-[10px] font-bold bg-emerald-50 px-2 py-0.5 rounded-full">{stats.pct}%</span>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium">Job Leads</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Job Leads</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black text-blue-600">{stats.job}</h3>
             <span className="text-blue-500 text-[10px] font-bold bg-blue-50 px-2 py-0.5 rounded-full">JOB</span>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium">Build / Build+</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Build</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black text-primary">{stats.free}</h3>
             <span className="text-primary text-[10px] font-bold bg-primary/10 px-2 py-0.5 rounded-full">BUILD</span>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium">Replied</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Replied</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black text-emerald-600">{stats.replied}</h3>
             <span className="material-symbols-outlined fill-1 text-emerald-400" style={{ fontSize: '18px' }}>mark_email_read</span>
@@ -160,15 +148,14 @@ export default function DashboardAnalytics({
         <div className="bg-primary/5 rounded-xl border border-primary/20 p-4 shadow-sm">
           <p className="text-primary text-[10px] font-bold uppercase tracking-wider">Untagged</p>
           <div className="flex items-end justify-between mt-1.5">
-            <h3 className="text-2xl font-black">{stats.unset || '—'}</h3>
+            <h3 className="text-2xl font-black">{stats.unset || '0'}</h3>
             <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '18px' }}>hourglass_empty</span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-        {/* Progress Donut Chart */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col">
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col lg:col-span-1 lg:row-span-2 order-2 lg:order-1">
           <h3 className="text-base font-bold mb-3">Tagging Progress</h3>
           <div className="flex-1 flex flex-col items-center justify-center">
             <div className="lh-wrap relative" style={{ width: '160px', height: '160px' }}>
@@ -187,32 +174,24 @@ export default function DashboardAnalytics({
             </div>
 
             <div className="mt-4 w-full grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#10b981' }}></span>Job</span><span className="font-black text-slate-800">{stats.job}</span></div>
-              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#9855f6' }}></span>Build</span><span className="font-black text-slate-800">{stats.build}</span></div>
-              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-black text-slate-800">{stats.buildPlus}</span></div>
-              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#d3d3d3' }}></span>Skip</span><span className="font-black text-slate-800">{stats.skip}</span></div>
-              <div className="flex items-center justify-between col-span-2"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#ef4444' }}></span>Dismissed</span><span className="font-black text-slate-800">{stats.dismissed}</span></div>
-              <div className="flex items-center justify-between col-span-2 border-t border-slate-100 pt-2 mt-1"><span className="text-slate-400">Untagged</span><span className="font-bold text-slate-500">{stats.unset || '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#10b981' }}></span>Job</span><span className="font-black text-slate-800">{stats.job}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#9855f6' }}></span>Build</span><span className="font-black text-slate-800">{stats.build}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-black text-slate-800">{stats.buildPlus}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#d3d3d3' }}></span>Skip</span><span className="font-black text-slate-800">{stats.skip}</span></div>
+              <div className="flex items-center justify-between col-span-2"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: '#ef4444' }}></span>Dismissed</span><span className="font-black text-slate-800">{stats.dismissed}</span></div>
             </div>
           </div>
         </div>
 
-        {/* Daily Progress & Categories */}
-        <div className="lg:col-span-2 flex flex-col gap-5">
-          {/* Daily Outreach Card with onOpenCalendar link */}
-          <div 
-            className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all group" 
-            onClick={onOpenCalendar}
-            title="Click to view full outreach history"
-          >
+        <div className="lg:col-span-2 flex flex-col gap-5 order-1 lg:order-2">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-primary/40 transition-all group" onClick={onOpenCalendar}>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-base font-bold group-hover:text-primary transition-colors">Daily Outreach</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Click to view full history calendar</p>
+                <h3 className="text-base font-bold group-hover:text-primary transition-colors">Today's Outreach</h3>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
-                <span className="material-symbols-outlined text-primary/40 group-hover:text-primary transition-colors" style={{ fontSize: '18px' }}>calendar_month</span>
+                <span className="material-symbols-outlined text-primary/40 group-hover:text-primary" style={{ fontSize: '18px' }}>calendar_month</span>
               </div>
             </div>
             <div className="flex items-center gap-5">
@@ -227,20 +206,19 @@ export default function DashboardAnalytics({
                 </div>
               </div>
               <div className="flex-1 space-y-2">
-                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#10b981' }}></span>Job</span><span className="font-bold text-slate-700">{dailyData.counts.job || 0}</span></div>
-                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#9855f6' }}></span>Build</span><span className="font-bold text-slate-700">{dailyData.counts.build_no_demo || 0}</span></div>
-                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-bold text-slate-700">{dailyData.counts.build_demo || 0}</span></div>
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#10b981' }}></span>Job</span><span className="font-bold text-slate-700">{dailyData.counts.job || 0}</span></div>
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#9855f6' }}></span>Build</span><span className="font-bold text-slate-700">{dailyData.counts.build_no_demo || 0}</span></div>
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-bold text-slate-700">{dailyData.counts.build_demo || 0}</span></div>
                 <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${dailyPct}%` }}></div>
                 </div>
-                <p className="text-[10px] text-slate-400">Goal: <span className="font-semibold text-slate-600">{dailyData.goal} / day</span></p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex-1">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex-1 hidden lg:block order-3">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold">Leads by Category</h3>
+              <h3 className="text-base font-bold">Top Categories</h3>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Top 8</span>
             </div>
             <div className="space-y-3">
@@ -255,18 +233,6 @@ export default function DashboardAnalytics({
                   </div>
                 </div>
               ))}
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Rating Distribution</p>
-              <div className="flex items-end gap-1.5 h-14">
-                {ratings.map((r, i) => (
-                  <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                    <span className="text-[9px] text-slate-500 font-semibold">{r.count}</span>
-                    <div className="w-full rounded-t-sm" style={{ height: `${r.heightPct}%`, minHeight: '4px', background: r.color }}></div>
-                    <span className="text-[9px] text-slate-400">{r.label}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </div>
