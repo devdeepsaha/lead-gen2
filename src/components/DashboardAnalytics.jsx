@@ -254,7 +254,7 @@ export default function DashboardAnalytics({
             <MapContainer 
               center={[mappableLeads[0].lat, mappableLeads[0].lng]} 
               zoom={5} 
-              scrollWheelZoom={false}
+              scrollWheelZoom={true}
               style={{ height: '100%', width: '100%', zIndex: 0 }}
             >
               <TileLayer
