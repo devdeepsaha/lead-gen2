@@ -5,15 +5,23 @@ const TEMPLATES = {
     build: (name) => `Hi ${name} Team,\n\nI'm Devdeep, a final-year B.Tech CSE student who sits somewhere between a designer and a developer.\n\nWhile most developers focus only on code, I enjoy building experiences where visuals, interaction, and storytelling are just as important as functionality. I work on creative web projects, interactive UI concepts, and design-driven builds where aesthetics and logic meet.\n\nI'm currently exploring opportunities where I can contribute as a creative developer / designer, someone who can think visually and execute technically.\n\nPortfolio:\nhttps://devdeepsahaportfolio.vercel.app/\n\nIf this aligns with what your team is building, I'd genuinely love to connect and learn more.\n\nThanks for your time,\nDevdeep Saha\ndevdeep120205@gmail.com\nInstagram: @devdeepsaha`,
   },
   build: {
-    build: (name) => `Hi ${name} Team,\n\nI'm Devdeep, a creative developer focused on building modern, performance-driven web experiences.\n\nI wanted to share my portfolio in case you're currently exploring design or development support:\nhttps://webdevstudio.vercel.app/\n\nIf at any point you're considering revamping your website or improving the user experience, I'd be happy to help. I work on clean UI systems, responsive layouts, and structured builds that balance aesthetics with performance.\n\nFeel free to reach out if this sounds relevant.\n\nBest regards,\nDevdeep Saha\ndevdeep120205@gmail.com\nInstagram: @devdeepsaha`,
+    build: (name) => `Hi ${name} Team,\n\nI'm Devdeep, a creative developer focused on building modern, performance-driven web experiences.\n\nI wanted to share my portfolio in case you're currently exploring design or development support:\nhttps://devwebstudio.vercel.app/\n\nIf at any point you're considering revamping your website or improving the user experience, I'd be happy to help. I work on clean UI systems, responsive layouts, and structured builds that balance aesthetics with performance.\n\nFeel free to reach out if this sounds relevant.\n\nBest regards,\nDevdeep Saha\ndevdeep120205@gmail.com\nInstagram: @devdeepsaha`,
   },
   build_plus: {
-    build: (name) => `Hi ${name} Team,\n\nI came across your website and felt there may be an opportunity to modernize the visual experience so it better reflects the quality of your services.\n\nTo demonstrate what I mean, I drafted a quick homepage concept tailored specifically to your brand — see the attached image. It is just a visual direction idea, but I believe it improves clarity, hierarchy, and overall perception while keeping things clean and modern.\n\nI specialize in building structured, performance-optimized websites ranging from clean static builds to React-based interactive platforms and CMS-powered systems, depending on business needs.\n\nYou can view more of my work here:\nhttps://webdevstudio.vercel.app/\n\nIf you are open to discussing a structured revamp, I would be happy to explore this further and share more detailed suggestions.\n\nBest regards,\nDevdeep Saha\ndevdeep120205@gmail.com\nInstagram: @devdeepsaha`,
+    build: (name) => `Hi ${name} Team,\n\nI came across your website and felt there may be an opportunity to modernize the visual experience so it better reflects the quality of your services.\n\nTo demonstrate what I mean, I drafted a quick homepage concept tailored specifically to your brand — see the attached image. It is just a visual direction idea, but I believe it improves clarity, hierarchy, and overall perception while keeping things clean and modern.\n\nI specialize in building structured, performance-optimized websites ranging from clean static builds to React-based interactive platforms and CMS-powered systems, depending on business needs.\n\nYou can view more of my work here:\nhttps://devwebstudio.vercel.app/\n\nIf you are open to discussing a structured revamp, I would be happy to explore this further and share more detailed suggestions.\n\nBest regards,\nDevdeep Saha\ndevdeep120205@gmail.com\nInstagram: @devdeepsaha`,
   },
 };
 
-// RECENTLY CHANGED: Added dailyData and setDailyData as destructured props
-export default function LeadTable({ leads = [], setLeads, searchQuery = '', dailyData, setDailyData }) {
+// RECENTLY CHANGED: Added outreachLog and setOutreachLog to props to fix the ReferenceError
+export default function LeadTable({ 
+  leads = [], 
+  setLeads, 
+  searchQuery = '', 
+  dailyData, 
+  setDailyData,
+  outreachLog = [], // Added
+  setOutreachLog    // Added
+}) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('all');
   const [sortType, setSortType] = useState('default');
@@ -85,7 +93,6 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
     updateLead(id, { status: finalStatus });
   };
 
-  // RECENTLY CHANGED: Implemented foolproof fallback copy and linked it to the daily dashboard tracker
   const handleCopyTemplate = (lead) => {
     const tplKey = lead.status === 'build_no_demo' ? 'build' : lead.status;
     const tpl = TEMPLATES[tplKey];
@@ -105,7 +112,7 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
         ts: Date.now()
       };
 
-      // UPDATED: Push to the dashboard state which triggers the Cloud Sync
+      // RECENTLY CHANGED: Correctly updating state with passed props
       const newLog = [newEntry, ...outreachLog];
       setOutreachLog(newLog);
 
@@ -118,7 +125,6 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
       setDailyData({ ...dailyData, date: today, counts: newCounts });
     };
 
-    // Foolproof copy method (helps bypass local development permissions)
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(msg).then(logOutreach).catch(() => {
           const ta = document.createElement("textarea");
@@ -148,14 +154,12 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-      {/* Temporary Toast for Copy Actions */}
       {toastMsg && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-xl">
           {toastMsg}
         </div>
       )}
 
-      {/* Control Bar */}
       <div className="px-6 py-4 border-b border-primary/10 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div>
@@ -178,7 +182,6 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
               ))}
             </div>
 
-            {/* Category Dropdown */}
             <div className="relative">
               <button onClick={() => { setCatDropOpen(!catDropOpen); setSortDropOpen(false); }} className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-primary/15 bg-white text-xs font-semibold hover:border-primary/40 transition-all">
                 <span className="material-symbols-outlined text-primary" style={{ fontSize: '15px' }}>filter_list</span>
@@ -199,7 +202,6 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
               )}
             </div>
 
-            {/* Sort Dropdown */}
             <div className="relative">
               <button onClick={() => { setSortDropOpen(!sortDropOpen); setCatDropOpen(false); }} className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-primary/15 bg-white text-xs font-semibold hover:border-primary/40 transition-all">
                 <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>sort</span>
@@ -233,7 +235,6 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
         </div>
       </div>
 
-      {/* Table Area */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-left text-sm" style={{ minWidth: '900px' }}>
           <thead className="sticky top-0 z-10 bg-primary/5 border-b border-primary/10 text-slate-500">
@@ -328,7 +329,6 @@ export default function LeadTable({ leads = [], setLeads, searchQuery = '', dail
         </table>
       </div>
 
-      {/* Footer Pagination */}
       <div className="flex items-center justify-between border-t border-primary/10 bg-white px-5 py-3">
         <p className="text-xs text-slate-500">
           Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, filteredLeads.length)} of {filteredLeads.length}
