@@ -1,0 +1,267 @@
+import React, { useMemo } from 'react';
+
+// CHANGED: Passed leads and dailyData as props so the component automatically recalculates when they change
+export default function DashboardAnalytics({ leads, dailyData = { goal: 10, counts: { job: 0, build_no_demo: 0, build_demo: 0 } }, dataSource = "cloud" }) {
+  
+  // CHANGED: Replaced imperative updateStats() with useMemo to derive stats directly from the leads array
+  const stats = useMemo(() => {
+    const job = leads.filter(l => l.status === "job").length;
+    const build = leads.filter(l => l.status === "build").length;
+    const buildPlus = leads.filter(l => l.status === "build_plus").length;
+    const skip = leads.filter(l => l.status === "none").length; // In original, 'none' was skip
+    const dismissed = leads.filter(l => l.status === "dismissed").length;
+    const replied = leads.filter(l => l.replied).length;
+
+    const free = build + buildPlus;
+    const tagged = job + free;
+    const total = leads.length;
+    const unset = total - tagged - skip - dismissed;
+    const pct = total ? Math.round((tagged / total) * 100) : 0;
+
+    return { job, build, buildPlus, skip, dismissed, free, tagged, total, unset, pct, replied };
+  }, [leads]);
+
+  // CHANGED: Derived top categories directly for React rendering
+  const topCategories = useMemo(() => {
+    const counts = {};
+    leads.forEach(l => { counts[l.category] = (counts[l.category] || 0) + 1; });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+  }, [leads]);
+  const catMax = topCategories[0] ? topCategories[0][1] : 1;
+  const catColors = ["#f94144", "#f3722c", "#f8961e", "#f9c74f", "#90be6d", "#43aa8b", "#4d908e", "#577590"];
+
+  // CHANGED: Derived rating distribution
+  const ratings = useMemo(() => {
+    const r45 = leads.filter((l) => l.rating >= 4.5).length;
+    const r40 = leads.filter((l) => l.rating >= 4 && l.rating < 4.5).length;
+    const r35 = leads.filter((l) => l.rating >= 3.5 && l.rating < 4).length;
+    const rLow = leads.filter((l) => l.rating > 0 && l.rating < 3.5).length;
+    const max = Math.max(r45, r40, r35, rLow, 1);
+    return [
+      { count: r45, color: "#10b981", label: "4.5+" },
+      { count: r40, color: "#9855f6", label: "4.0+" },
+      { count: r35, color: "#f59e0b", label: "3.5+" },
+      { count: rLow, color: "#ef4444", label: "<3.5" },
+    ].map(r => ({ ...r, heightPct: Math.round((r.count / max) * 100) }));
+  }, [leads]);
+
+  // CHANGED: React-ified the SVG polar math for the Lighthouse Donut
+  const donutPaths = useMemo(() => {
+    if (!stats.total) return [];
+    
+    const polarToCartesian = (cx, cy, r, angleDeg) => {
+      const rad = ((angleDeg - 90) * Math.PI) / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    };
+
+    const data = [
+      { count: stats.job, color: "#10b981" },
+      { count: stats.build, color: "#9855f6" },
+      { count: stats.buildPlus, color: "#3b82f6" },
+      { count: stats.skip, color: "#D3D3D3" },
+      { count: stats.dismissed, color: "#ef4444" },
+    ];
+    
+    const active = data.filter((s) => s.count > 0);
+    if (!active.length) return [];
+    if (active.length === 1) {
+      return [{ d: null, singleColor: active[0].color }]; // Special case for 100% one type
+    }
+
+    const gapAngle = 2, minAngle = 8;
+    const totalGaps = active.length * gapAngle;
+    const availableAngle = 360 - totalGaps;
+    let angles = active.map((s) => (s.count / stats.total) * availableAngle);
+    let totalBorrow = 0;
+    
+    angles = angles.map((a) => {
+      if (a < minAngle) {
+        totalBorrow += minAngle - a;
+        return minAngle;
+      }
+      return a;
+    });
+
+    const largeTotal = angles.filter((a) => a > minAngle).reduce((s, a) => s + a, 0);
+    if (largeTotal > 0 && totalBorrow > 0) {
+      angles = angles.map((a) => a > minAngle ? Math.max(minAngle, a - (a / largeTotal) * totalBorrow) : a);
+    }
+
+    let currentAngle = 0;
+    return active.map((seg, i) => {
+      const angle = angles[i];
+      const endAngle = currentAngle + angle;
+      const start = polarToCartesian(80, 80, 60, currentAngle);
+      const end = polarToCartesian(80, 80, 60, endAngle);
+      const largeArc = angle > 180 ? 1 : 0;
+      const d = `M ${start.x} ${start.y} A 60 60 0 ${largeArc} 1 ${end.x} ${end.y}`;
+      currentAngle = endAngle + gapAngle;
+      return { d, color: seg.color, strokeWidth: 16 };
+    });
+  }, [stats]);
+
+  // Derived Daily Data
+  const dailyTotal = (dailyData.counts.job || 0) + (dailyData.counts.build_no_demo || 0) + (dailyData.counts.build_demo || 0);
+  const dailyPct = Math.min(100, Math.round((dailyTotal / dailyData.goal) * 100));
+
+  return (
+    <div id="view-dashboard" className="flex-1 p-6 overflow-y-auto" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="mb-5">
+        <h1 className="text-2xl font-black tracking-tight">Dashboard Analytics</h1>
+        <p className="text-sm text-slate-500">
+          <span className="font-semibold text-slate-700">{stats.total}</span> leads loaded · <span className="text-primary font-medium">from {dataSource}</span>
+        </p>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <p className="text-slate-500 text-xs font-medium">Total Leads</p>
+          <div className="flex items-end justify-between mt-1.5">
+            <h3 className="text-2xl font-black">{stats.total || '—'}</h3>
+            <span className="text-emerald-500 text-[10px] font-bold bg-emerald-50 px-2 py-0.5 rounded-full">ALL</span>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <p className="text-slate-500 text-xs font-medium">Tagged</p>
+          <div className="flex items-end justify-between mt-1.5">
+            <h3 className="text-2xl font-black text-emerald-600">{stats.tagged}</h3>
+            <span className="text-emerald-500 text-[10px] font-bold bg-emerald-50 px-2 py-0.5 rounded-full">{stats.pct}%</span>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <p className="text-slate-500 text-xs font-medium">Job Leads</p>
+          <div className="flex items-end justify-between mt-1.5">
+            <h3 className="text-2xl font-black text-blue-600">{stats.job}</h3>
+            <span className="text-blue-500 text-[10px] font-bold bg-blue-50 px-2 py-0.5 rounded-full">JOB</span>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <p className="text-slate-500 text-xs font-medium">Build / Build+</p>
+          <div className="flex items-end justify-between mt-1.5">
+            <h3 className="text-2xl font-black text-primary">{stats.free}</h3>
+            <span className="text-primary text-[10px] font-bold bg-primary/10 px-2 py-0.5 rounded-full">BUILD</span>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <p className="text-slate-500 text-xs font-medium">Replied</p>
+          <div className="flex items-end justify-between mt-1.5">
+            <h3 className="text-2xl font-black text-emerald-600">{stats.replied}</h3>
+            <span className="material-symbols-outlined fill-1 text-emerald-400" style={{ fontSize: '18px' }}>mark_email_read</span>
+          </div>
+        </div>
+        <div className="bg-primary/5 rounded-xl border border-primary/20 p-4 shadow-sm">
+          <p className="text-primary text-[10px] font-bold uppercase tracking-wider">Untagged</p>
+          <div className="flex items-end justify-between mt-1.5">
+            <h3 className="text-2xl font-black">{stats.unset || '—'}</h3>
+            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '18px' }}>hourglass_empty</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+        {/* Lighthouse-style donut */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col">
+          <h3 className="text-base font-bold mb-3">Tagging Progress</h3>
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <div className="lh-wrap" style={{ width: '160px', height: '160px' }}>
+              <svg width="160" height="160" viewBox="0 0 160 160">
+                <circle cx="80" cy="80" r="60" fill="none" stroke="#1e293b10" strokeWidth="16" />
+                {/* CHANGED: Dynamic paths based on the derived math */}
+                {donutPaths.map((p, i) => (
+                  p.singleColor ? 
+                    <circle key={i} cx="80" cy="80" r="60" fill="none" stroke={p.singleColor} strokeWidth="16" /> :
+                    <path key={i} d={p.d} fill="none" stroke={p.color} strokeWidth={p.strokeWidth} strokeLinecap="butt" />
+                ))}
+              </svg>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px', pointerEvents: 'none' }}>
+                <span style={{ fontSize: '22px', fontWeight: 900, color: '#1e293b', lineHeight: 1 }}>{stats.pct}%</span>
+                <span style={{ fontSize: '10px', fontWeight: 600, color: '#94a3b8' }}>Tagged</span>
+              </div>
+            </div>
+
+            <div className="mt-4 w-full grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#10b981' }}></span>Job</span><span className="font-black text-slate-800">{stats.job}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#9855f6' }}></span>Build</span><span className="font-black text-slate-800">{stats.build}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-black text-slate-800">{stats.buildPlus}</span></div>
+              <div className="flex items-center justify-between"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#d3d3d3' }}></span>Skip</span><span className="font-black text-slate-800">{stats.skip}</span></div>
+              <div className="flex items-center justify-between col-span-2"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2.5 h-2.5 rounded-sm inline-block flex-shrink-0" style={{ background: '#ef4444' }}></span>Dismissed</span><span className="font-black text-slate-800">{stats.dismissed}</span></div>
+              <div className="flex items-center justify-between col-span-2 border-t border-slate-100 pt-2 mt-1"><span className="text-slate-400">Untagged</span><span className="font-bold text-slate-500">{stats.unset || '—'}</span></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Daily sent counter + category chart */}
+        <div className="lg:col-span-2 flex flex-col gap-5">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all group" title="Click to view full outreach history">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-base font-bold group-hover:text-primary transition-colors">Daily Outreach</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Click to view full history calendar</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+                <span className="material-symbols-outlined text-primary/40 group-hover:text-primary transition-colors" style={{ fontSize: '18px' }}>calendar_month</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-5">
+              <div className="daily-count-ring relative flex-shrink-0 flex items-center justify-center" style={{ width: '88px', height: '88px' }}>
+                <svg width="88" height="88" viewBox="0 0 88 88">
+                  <circle cx="44" cy="44" r="36" fill="none" stroke="#f1f5f9" strokeWidth="7" />
+                  <circle cx="44" cy="44" r="36" fill="none" stroke="#9855f6" strokeWidth="7" strokeLinecap="round" strokeDasharray="226" strokeDashoffset={226 * (1 - dailyPct / 100)} style={{ transform: 'rotate(-90deg)', transformOrigin: '44px 44px', transition: 'stroke-dashoffset 0.6s ease' }} />
+                </svg>
+                <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ fontSize: '24px', fontWeight: 900, color: '#000', lineHeight: 1 }}>{dailyTotal}</span>
+                  <span style={{ fontSize: '9px', fontWeight: 600, color: '#000' }}>sent</span>
+                </div>
+              </div>
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#10b981' }}></span>Job</span><span className="font-bold text-slate-700">{dailyData.counts.job || 0}</span></div>
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#9855f6' }}></span>Build</span><span className="font-bold text-slate-700">{dailyData.counts.build_no_demo || 0}</span></div>
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-bold text-slate-700">{dailyData.counts.build_demo || 0}</span></div>
+                <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${dailyPct}%` }}></div>
+                </div>
+                <p className="text-[10px] text-slate-400">Goal: <span className="font-semibold text-slate-600">{dailyData.goal} / day</span></p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex-1">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold">Leads by Category</h3>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Top 8</span>
+            </div>
+            <div className="space-y-3">
+              {topCategories.map(([cat, count], i) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-medium text-slate-700 truncate max-w-[200px]">{cat}</span>
+                    <span className="font-bold text-slate-600 ml-2">{count}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                    <div className="bar-fill h-full rounded-full" style={{ width: `${Math.round((count / catMax) * 100)}%`, background: catColors[i % catColors.length] }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Rating Distribution</p>
+              <div className="flex items-end gap-1.5 h-14">
+                {ratings.map((r, i) => (
+                  <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                    <span className="text-[9px] text-slate-500 font-semibold">{r.count}</span>
+                    <div className="w-full rounded-t-sm" style={{ height: `${r.heightPct}%`, minHeight: '4px', background: r.color }}></div>
+                    <span className="text-[9px] text-slate-400">{r.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
