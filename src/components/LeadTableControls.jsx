@@ -40,17 +40,28 @@ export default function LeadTableControls({
   return (
     <div className="px-4 md:px-6 py-3 md:py-4 bg-white md:border-b border-primary/10 sticky top-0 z-20 shadow-sm md:shadow-none">
       
-      <div className="md:hidden flex items-stretch rounded-xl shadow-sm h-11 mb-3">
+      {/* Mobile Search Bar */}
+      <div className="md:hidden flex items-stretch rounded-xl shadow-sm h-11 mb-3 relative">
         <div className="flex items-center justify-center pl-4 bg-white rounded-l-xl border border-r-0 border-primary/15">
           <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '18px' }}>search</span>
         </div>
         <input 
           type="text" 
-          placeholder="Search leads..." 
-          className="flex-1 bg-white border border-l-0 border-primary/15 rounded-r-xl px-3 text-sm outline-none focus:border-primary/40 placeholder:text-slate-400" 
+          placeholder="Search leads (Press 'C' to clear)..." 
+          className="flex-1 bg-white border border-l-0 border-primary/15 rounded-r-xl px-3 pr-10 text-sm outline-none focus:border-primary/40 placeholder:text-slate-400" 
           value={searchQuery} 
           onChange={(e) => setSearchQuery && setSearchQuery(e.target.value)} 
         />
+        {/* RECENTLY CHANGED: Added clear (x) button to the mobile search input */}
+        {searchQuery && (
+          <button 
+            type="button"
+            onClick={() => setSearchQuery('')} 
+            className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>close</span>
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -100,7 +111,6 @@ export default function LeadTableControls({
               </button>
 
               {filterDropOpen && (
-                // RECENTLY CHANGED: Set to `left-0` with a max-width safeguard so it never bleeds off phone screens
                 <div className="absolute top-full left-0 mt-1 z-50 w-[280px] max-w-[85vw] bg-white border border-primary/15 rounded-xl shadow-xl p-4 cursor-default">
                   
                   <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
@@ -108,7 +118,7 @@ export default function LeadTableControls({
                       <span className="material-symbols-outlined text-primary" style={{ fontSize: '16px' }}>tune</span>
                       Advanced Filters
                     </h4>
-                    <button onClick={() => applyQuickFilter('reset')} className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors">Reset All</button>
+                    <button onClick={() => applyQuickFilter('reset')} className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors">Reset All (R)</button>
                   </div>
 
                   <div className="mb-5 bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -155,7 +165,7 @@ export default function LeadTableControls({
 
                   <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
                     <button onClick={() => applyQuickFilter('high_rating')} className="px-2.5 py-1.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold uppercase tracking-wider rounded-md border border-emerald-100 hover:bg-emerald-100 transition-colors">4.5+ Stars</button>
-                    <button onClick={() => applyQuickFilter('sweet_spot')} className="px-2.5 py-1.5 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider rounded-md border border-blue-100 hover:bg-blue-100 transition-colors">Sweet Spot</button>
+                    <button onClick={() => applyQuickFilter('sweet_spot')} className="px-2.5 py-1.5 bg-blue-50 text-blue-600 text-[10px] font-bold uppercase tracking-wider rounded-md border border-blue-100 hover:bg-blue-100 transition-colors">Sweet Spot (S)</button>
                     <button onClick={() => applyQuickFilter('low_reviews')} className="px-2.5 py-1.5 bg-amber-50 text-amber-600 text-[10px] font-bold uppercase tracking-wider rounded-md border border-amber-100 hover:bg-amber-100 transition-colors">&lt; 100 Rev</button>
                   </div>
                 </div>
@@ -169,7 +179,6 @@ export default function LeadTableControls({
                 <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>expand_more</span>
               </button>
               {catDropOpen && (
-                // RECENTLY CHANGED: Mobile center alignment via -translate-x-1/2 ensures it stays perfectly on screen
                 <div className="absolute top-full left-1/2 -translate-x-1/2 md:translate-x-0 md:left-0 mt-1 z-50 min-w-[200px] max-h-80 overflow-y-auto bg-white border border-primary/15 rounded-xl shadow-lg">
                   <div onClick={() => { setCatFilter('all'); setCatDropOpen(false); setPage(1); }} className={`p-2 text-sm cursor-pointer flex justify-between ${catFilter === 'all' ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-primary/5'}`}>
                     All Categories <span className="opacity-50 text-xs">{totalLeads}</span>
@@ -190,7 +199,6 @@ export default function LeadTableControls({
                 <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '15px' }}>expand_more</span>
               </button>
               {sortDropOpen && (
-                // RECENTLY CHANGED: Right alignment prevents overflow on the right side
                 <div className="absolute top-full right-0 mt-1 z-50 w-48 bg-white border border-primary/15 rounded-xl shadow-lg flex flex-col p-1 text-sm">
                   {[{ id: 'default', label: 'Default Order' }, { id: 'name_asc', label: 'Name A → Z' }, { id: 'rating_desc', label: 'Highest Rated' }, { id: 'reviews_desc', label: 'Most Reviews' }, { id: 'cat_name', label: 'Category → Name' }].map(opt => (
                     <button key={opt.id} onClick={() => { setSortType(opt.id); setSortDropOpen(false); setPage(1); }} className={`text-left px-3 py-2 rounded-lg ${sortType === opt.id ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-primary/5'}`}>{opt.label}</button>

@@ -77,6 +77,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     return results.filter((r) => r.name);
   };
 
+  // RECENTLY CHANGED: Pushes CSV data directly to Vercel KV via API
   const handleFile = (file) => {
     if (!isAdmin) {
       setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
@@ -94,7 +95,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         const parsed = parseCSV(e.target.result);
         if (!parsed.length) throw new Error("No valid rows found in CSV");
         
-        setUploadStatus({ msg: `Parsed ${parsed.length} rows — merging data...`, type: 'loading' });
+        setUploadStatus({ msg: `Parsed ${parsed.length} rows — uploading to Vercel KV...`, type: 'loading' });
         
         const existingMap = new Map(leads.map(l => [l.id, l]));
         let addedCount = 0;
@@ -118,24 +119,26 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         });
         
         const newLeadsArray = Array.from(existingMap.values());
+        
+        // 1. Update UI instantly
         setLeads(newLeadsArray); 
 
-        const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(newLeadsArray, null, 2)};\n\nexport default FALLBACK_LEADS;`;
-        const blob = new Blob([fileContent], { type: 'application/javascript' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'fallback-leads.js';
-        a.click();
-        URL.revokeObjectURL(url);
-        
+        // 2. Push fully merged array directly to cloud
+        const res = await fetch('/api/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ auth: adminKey, leads: newLeadsArray })
+        });
+
+        if (!res.ok) throw new Error(`Server returned ${res.status}. Check API size limits or key.`);
+
         setUploadStatus({ 
-          msg: `✅ Map coordinates merged! "fallback-leads.js" was downloaded. Replace your existing file in /src/data to save permanently.`, 
+          msg: `✅ Uploaded ${addedCount} new leads and updated ${updatedCount}. Saved directly to Vercel KV!`, 
           type: 'success' 
         });
         
       } catch (err) {
-        setUploadStatus({ msg: `❌ Upload failed: ${err.message}`, type: 'error' });
+        setUploadStatus({ msg: `❌ Cloud save failed: ${err.message}`, type: 'error' });
       }
     };
     reader.readAsText(file, "utf-8");
@@ -148,6 +151,65 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     setIsDragging(false);
     if (!isAdmin) return setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
     handleFile(e.dataTransfer.files[0]);
+  };
+
+  // RECENTLY CHANGED: Clean duplicates and automatically push fixed array to Vercel KV
+  const handleSmartCleanup = async () => {
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode to clean the database.");
+    if (!window.confirm("This will scan for duplicates, merge their contact info/tags, and delete the extra rows. Proceed?")) return;
+
+    setUploadStatus({ msg: "Cleaning duplicates and saving to cloud...", type: "loading" });
+
+    const uniqueMap = new Map();
+    let removedCount = 0;
+
+    leads.forEach(lead => {
+      const key = lead.name.toLowerCase().trim();
+      
+      if (uniqueMap.has(key)) {
+        removedCount++;
+        const existing = uniqueMap.get(key);
+
+        let bestStatus = existing.status;
+        if (existing.status === 'none' && lead.status !== 'none') bestStatus = lead.status;
+
+        uniqueMap.set(key, {
+          ...existing,
+          status: bestStatus,
+          replied: existing.replied || lead.replied,
+          phone: existing.phone || lead.phone,
+          email: existing.email || lead.email,
+          lat: existing.lat || lead.lat,
+          lng: existing.lng || lead.lng
+        });
+      } else {
+        uniqueMap.set(key, { ...lead });
+      }
+    });
+
+    const cleanedLeads = Array.from(uniqueMap.values());
+    
+    // Instantly update UI
+    setLeads(cleanedLeads);
+
+    try {
+      // Send directly to the cloud backend
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth: adminKey, leads: cleanedLeads })
+      });
+
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+      setUploadStatus({ 
+        msg: `✅ Cleanup complete! Removed ${removedCount} duplicates and saved pristine data to Vercel KV cloud.`, 
+        type: 'success' 
+      });
+
+    } catch (err) {
+      setUploadStatus({ msg: `❌ Cloud save failed: ${err.message}`, type: 'error' });
+    }
   };
 
   const saveDailyGoal = () => {
@@ -166,60 +228,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     a.href = URL.createObjectURL(new Blob([JSON.stringify(map, null, 2)], { type: "application/json" }));
     a.download = "leadflow_statuses_backup.json";
     a.click();
-  };
-
-  // RECENTLY CHANGED: Smart Deduplication function to clean up messes
-  const handleSmartCleanup = () => {
-    if (!isAdmin) return alert("🔒 Unlock Admin Mode to clean the database.");
-    if (!window.confirm("This will scan for duplicates. It will MERGE new contact info (phones/emails) with your OLD manual tags, and delete the extra duplicate rows. Proceed?")) return;
-
-    const uniqueMap = new Map();
-    let removedCount = 0;
-
-    leads.forEach(lead => {
-      // Use the business name as the strict identifier for duplicates
-      const key = lead.name.toLowerCase().trim();
-      
-      if (uniqueMap.has(key)) {
-        removedCount++;
-        const existing = uniqueMap.get(key);
-
-        // SMART MERGE LOGIC:
-        // 1. Keep the manual status if it exists. If the old one is 'none' but the duplicate was tagged, keep the tag.
-        let bestStatus = existing.status;
-        if (existing.status === 'none' && lead.status !== 'none') bestStatus = lead.status;
-
-        // 2. Merge contact details (if the new duplicate has a phone number, keep it!)
-        uniqueMap.set(key, {
-          ...existing,
-          status: bestStatus,
-          replied: existing.replied || lead.replied,
-          phone: existing.phone || lead.phone,
-          email: existing.email || lead.email,
-          lat: existing.lat || lead.lat,
-          lng: existing.lng || lead.lng
-        });
-      } else {
-        uniqueMap.set(key, { ...lead });
-      }
-    });
-
-    const cleanedLeads = Array.from(uniqueMap.values());
-    
-    // Instantly update the UI
-    setLeads(cleanedLeads);
-
-    // Generate and download the cleaned file so the user can permanently save the fix
-    const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleanedLeads, null, 2)};\n\nexport default FALLBACK_LEADS;`;
-    const blob = new Blob([fileContent], { type: 'application/javascript' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'fallback-leads-cleaned.js';
-    a.click();
-    URL.revokeObjectURL(url);
-
-    alert(`🧹 Cleanup complete! Removed ${removedCount} duplicates.\n\nYour manual tags were saved and new contact numbers were merged. \n\nPlease replace your local "fallback-leads.js" with the downloaded file.`);
   };
 
   const resetAllStatuses = () => {
@@ -255,7 +263,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
               <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
               <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich existing leads (like adding map coordinates) or add new ones. Your manual status tags are preserved.</p>
             </div>
-            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Developer Flow</span>
+            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Cloud Upload</span>
           </div>
           
           <div 
@@ -282,7 +290,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         {/* Sync & Backup */}
         <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
           <h3 className="font-bold text-sm mb-1">Data Management</h3>
-          <p className="text-xs text-slate-400 mb-4">Sync statuses to cloud or download backups.</p>
+          <p className="text-xs text-slate-400 mb-4">Sync statuses to cloud or deduplicate database.</p>
           
           <div className="flex flex-col gap-3">
             <button onClick={onForceSync} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-primary/20 text-primary hover:bg-primary/5' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
@@ -292,9 +300,8 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span> Download Backup JSON
             </button>
             
-            {/* RECENTLY CHANGED: Smart Cleanup Button */}
             <button onClick={handleSmartCleanup} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 mt-2 rounded-lg text-white text-sm font-bold transition-all ${isAdmin ? 'bg-blue-500 hover:bg-blue-600 shadow-md shadow-blue-500/20' : 'bg-slate-300 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>cleaning_services</span> Smart Deduplicate
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>cleaning_services</span> Smart Deduplicate (Cloud)
             </button>
           </div>
         </div>
@@ -305,7 +312,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
             <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
             <div className="flex justify-between"><span>Tagged</span><span className="font-bold text-emerald-600">{stats.tagged}</span></div>
             <div className="flex justify-between"><span>Categories</span><span className="font-bold text-slate-800">{stats.categories}</span></div>
-            <div className="flex justify-between"><span>Data source</span><span className="font-bold text-primary">Local JSON File</span></div>
+            <div className="flex justify-between"><span>Data source</span><span className="font-bold text-primary">Vercel KV Cloud</span></div>
           </div>
         </div>
 

@@ -40,6 +40,59 @@ export default function LeadDashboard() {
   });
 
   const [selectedMapLead, setSelectedMapLead] = useState(null);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSearchQuery('');
+        setShowShortcutsHelp(false);
+        return;
+      }
+
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      const key = e.key.toLowerCase();
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcutsHelp(prev => !prev);
+      }
+
+      if (key === 'c') {
+        e.preventDefault();
+        setSearchQuery('');
+      }
+      
+      if (key === 's') {
+        e.preventDefault();
+        setRangeFilters({ ratingMin: 3.5, ratingMax: 4.5, reviewsMin: 50, reviewsMax: 5000 });
+        setPage(1);
+        setActiveView('leads'); 
+      }
+
+      if (key === 'r') {
+        e.preventDefault();
+        setRangeFilters({ ratingMin: 0, ratingMax: 5, reviewsMin: 0, reviewsMax: 5000 });
+        setPage(1);
+      }
+
+      if (key === 'p') {
+        e.preventDefault();
+        const targetPage = prompt("Go to page number:");
+        if (targetPage !== null) {
+          const parsed = parseInt(targetPage, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            setPage(parsed);
+            setActiveView('leads'); 
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -49,10 +102,11 @@ export default function LeadDashboard() {
       let fetchedOutreach = [];
 
       try {
+        // RECENTLY CHANGED: Re-enabled fetching base leads from Vercel KV so changes persist
         const [lRes, sRes] = await Promise.all([
-          fetch('/api/leads'),
-          fetch('/api/statuses')
-        ]).catch(() => [null, null]);
+          fetch('/api/leads').catch(() => null),
+          fetch('/api/statuses').catch(() => null)
+        ]);
 
         if (lRes?.ok) fetchedLeads = await lRes.json();
         if (sRes?.ok) {
@@ -64,6 +118,7 @@ export default function LeadDashboard() {
       } catch (err) { console.error(err); }
 
       const baseLeads = (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) ? fetchedLeads : FALLBACK_LEADS;
+      
       const mergedLeads = baseLeads.map(l => ({
         ...l,
         id: String(l.id),
@@ -168,7 +223,6 @@ export default function LeadDashboard() {
     a.click();
   };
 
-  // RECENTLY CHANGED: Added timestamp so clicking the same lead twice still triggers the map zoom!
   const handleLocateOnMap = (lead) => {
     if (!lead.lat || !lead.lng) {
       alert("No map coordinates available for this lead.");
@@ -178,12 +232,11 @@ export default function LeadDashboard() {
     setActiveView('dashboard');
   };
 
-  // RECENTLY CHANGED: New function to jump from the Map Popup directly into the Directory search
   const handleViewInDirectory = (lead) => {
-    setSearchQuery(lead.name);  // Auto-fill the search bar
-    setStatusFilter('all');     // Clear other filters so it definitely shows up
+    setSearchQuery(lead.name);
+    setStatusFilter('all');
     setCatFilter('all');
-    setActiveView('leads');     // Switch to the table tab
+    setActiveView('leads');
   };
 
   const NavItems = [
@@ -204,6 +257,48 @@ export default function LeadDashboard() {
         </div>
       )}
 
+      {showShortcutsHelp && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9999] flex items-center justify-center p-4" onClick={() => setShowShortcutsHelp(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">keyboard</span>
+                Keyboard Shortcuts
+              </h2>
+              <button onClick={() => setShowShortcutsHelp(false)} className="text-slate-400 hover:bg-slate-100 p-1 rounded-md transition-colors">
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>close</span>
+              </button>
+            </div>
+            
+            <div className="space-y-3 mt-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-600">Clear search input</span>
+                <div className="flex gap-1">
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-mono font-bold shadow-sm">Esc</kbd>
+                  <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-mono font-bold shadow-sm">C</kbd>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-600">Apply "Sweet Spot" filters</span>
+                <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-mono font-bold shadow-sm">S</kbd>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-600">Reset range filters</span>
+                <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-mono font-bold shadow-sm">R</kbd>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-600">Jump to a page number</span>
+                <kbd className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded text-xs font-mono font-bold shadow-sm">P</kbd>
+              </div>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                <span className="text-sm font-semibold text-primary">Toggle this help menu</span>
+                <kbd className="bg-primary/10 border border-primary/20 text-primary px-2 py-1 rounded text-xs font-mono font-bold shadow-sm">?</kbd>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="flex-shrink-0 flex items-center justify-between border-b border-primary/10 bg-white px-4 lg:px-6 py-3 z-30 shadow-sm lg:shadow-none">
         <div className="flex items-center gap-3 lg:gap-6">
           <div className="flex items-center gap-2 lg:gap-3">
@@ -216,11 +311,25 @@ export default function LeadDashboard() {
             </div>
           </div>
           
-          <div className="hidden lg:flex items-center gap-1 border-l border-primary/20 pl-6 ml-2">
-            <label className="relative flex items-center">
-              <span className="material-symbols-outlined absolute left-3 text-slate-400" style={{ fontSize: '18px' }}>search</span>
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-10 w-80 rounded-lg border border-primary/15 bg-primary/5 pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-primary/40 transition-all" placeholder="Search leads, domains..." />
-            </label>
+          <div className="hidden lg:flex items-center gap-1 border-l border-primary/20 pl-6 ml-2 relative">
+            <span className="material-symbols-outlined absolute left-9 text-slate-400" style={{ fontSize: '18px' }}>search</span>
+            <input 
+              type="text" 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              className="h-10 w-80 rounded-lg border border-primary/15 bg-primary/5 pl-10 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/40 transition-all" 
+              placeholder="Search leads (Press 'C' to clear)..." 
+            />
+            {searchQuery && (
+              <button 
+                type="button" 
+                onClick={() => setSearchQuery('')} 
+                className="absolute right-3 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors"
+                title="Clear search (Esc)"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -228,10 +337,16 @@ export default function LeadDashboard() {
           <button onClick={() => { if(isAdmin){setIsAdmin(false);setAdminKey("");}else{const p=prompt("Admin Key:");if(p){setAdminKey(p);setIsAdmin(true);}} }} className={`w-8 h-8 lg:w-9 lg:h-9 rounded-lg flex items-center justify-center transition-all ${isAdmin ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`} title={isAdmin ? "Lock Admin Mode" : "Unlock Admin Mode"}>
             <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{isAdmin ? 'lock_open' : 'lock'}</span>
           </button>
+          
+          <button onClick={() => setShowShortcutsHelp(true)} className="w-8 h-8 lg:w-9 lg:h-9 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 flex items-center justify-center transition-all" title="Keyboard Shortcuts (?)">
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>help</span>
+          </button>
+
           <div className="flex items-center gap-1.5 lg:gap-2 text-[10px] lg:text-xs text-slate-500">
             <span className={`sync-dot w-2 h-2 rounded-full inline-block ${syncStatus === 'synced' ? 'bg-emerald-500' : syncStatus === 'error' ? 'bg-red-500' : 'bg-amber-500 animate-pulse'}`} />
             <span className="hidden sm:inline font-medium">{syncStatus === 'synced' ? 'Synced' : syncStatus === 'error' ? 'Sync Error' : 'Saving...'}</span>
           </div>
+          
           <button onClick={handleExportMarked} className="flex h-8 lg:h-10 items-center gap-1 lg:gap-2 rounded-lg bg-primary px-3 lg:px-4 text-[11px] lg:text-sm font-bold text-white shadow-md shadow-primary/25 hover:bg-primary/90 active:scale-95 transition-all ml-1 lg:ml-0">
             <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>ios_share</span><span className="hidden sm:inline">Export</span>
           </button>
@@ -256,7 +371,6 @@ export default function LeadDashboard() {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 lg:pb-0 w-full">
-          {/* RECENTLY CHANGED: Passed onViewInDirectory down to the Dashboard */}
           {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} selectedMapLead={selectedMapLead} onViewInDirectory={handleViewInDirectory} onOpenCalendar={() => setIsCalOpen(true)} />}
           
           {activeView === 'leads' && (
