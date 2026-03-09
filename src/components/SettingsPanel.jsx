@@ -5,10 +5,21 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState({ msg: '', type: '' });
 
+  // RECENTLY CHANGED: Added real-time calculation of the JSON payload size in KB/MB
   const stats = useMemo(() => {
     const tagged = leads.filter(l => ['job', 'build', 'build_plus'].includes(l.status)).length;
     const categories = new Set(leads.map(l => l.category)).size;
-    return { total: leads.length, tagged, categories };
+    
+    // Calculate exact byte size of the payload being sent to Vercel
+    const payloadString = JSON.stringify(leads);
+    const bytes = new Blob([payloadString]).size;
+    const kb = bytes / 1024;
+    const mb = bytes / (1024 * 1024);
+    
+    const sizeDisplay = bytes > 1024 * 1024 ? `${mb.toFixed(2)} MB` : `${kb.toFixed(1)} KB`;
+    const percentOfLimit = Math.min(100, Math.round((kb / 1024) * 100)); // Based on 1MB (1024KB) strict limit
+
+    return { total: leads.length, tagged, categories, sizeDisplay, percentOfLimit, kb };
   }, [leads]);
 
   const parseCSVRow = (line) => {
@@ -119,11 +130,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         
         const newLeadsArray = Array.from(existingMap.values());
         
-        // 1. Update UI instantly with the massive payload
         setLeads(newLeadsArray); 
-
-        // RECENTLY CHANGED: Removed the fetch API call from here completely! 
-        // We now just stage the massive data in the UI so the server doesn't crash on a 400 Bad Request.
         
         setUploadStatus({ 
           msg: `✅ Loaded ${addedCount} new leads and updated ${updatedCount} in memory. Please click 'Smart Deduplicate' to clean and save to the cloud!`, 
@@ -146,7 +153,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     handleFile(e.dataTransfer.files[0]);
   };
 
-  // RECENTLY CHANGED: Smart Deduplicate now handles pushing to the cloud AFTER shrinking the payload size.
   const handleSmartCleanup = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to clean the database.");
     if (!window.confirm("This will scan for duplicates, merge their contact info/tags, and push the cleaned database to Vercel. Proceed?")) return;
@@ -182,11 +188,9 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
 
     const cleanedLeads = Array.from(uniqueMap.values());
     
-    // Instantly update UI with the cleaned data
     setLeads(cleanedLeads);
 
     try {
-      // RECENTLY CHANGED: Push the smaller, cleaned array straight to the cloud as a raw array.
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -299,13 +303,30 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           </div>
         </div>
 
+        {/* RECENTLY CHANGED: Updated Current Dataset section with live payload size tracker */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
           <h3 className="font-bold text-sm mb-3">Current Dataset</h3>
-          <div className="space-y-2 text-xs text-slate-500">
+          <div className="space-y-3 text-xs text-slate-500">
             <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
             <div className="flex justify-between"><span>Tagged</span><span className="font-bold text-emerald-600">{stats.tagged}</span></div>
             <div className="flex justify-between"><span>Categories</span><span className="font-bold text-slate-800">{stats.categories}</span></div>
             <div className="flex justify-between"><span>Data source</span><span className="font-bold text-primary">Vercel KV Cloud</span></div>
+            
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex justify-between items-end mb-1.5">
+                <span className="font-semibold">Vercel Payload Size</span>
+                <span className={`font-black ${stats.kb > 900 ? 'text-red-500' : stats.kb > 600 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                  {stats.sizeDisplay}
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all ${stats.kb > 900 ? 'bg-red-500' : stats.kb > 600 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                  style={{ width: `${stats.percentOfLimit}%` }}
+                ></div>
+              </div>
+              <p className="text-[9px] text-slate-400 mt-1.5 text-right">Max serverless limit: ~1024 KB (1MB)</p>
+            </div>
           </div>
         </div>
 
