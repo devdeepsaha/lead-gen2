@@ -2,7 +2,8 @@ import React from 'react';
 
 export default function LeadTableDesktop({
   leads, setLeads, paginatedLeads, isAdmin, copyMode, 
-  handleStatusClick, handleCopyTemplate, handleEmailCopy, updateLead
+  handleStatusClick, handleCopyTemplate, handleEmailCopy, updateLead,
+  onLocate // RECENTLY CHANGED: Received map handler
 }) {
   return (
     <div className="hidden md:block flex-1 overflow-auto bg-white">
@@ -43,10 +44,25 @@ export default function LeadTableDesktop({
                 </td>
                 <td className="px-4 py-4 min-w-[220px]">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-900 text-sm truncate max-w-[220px] block">{l.name}</span>
-                    {urlObj && <a href={l.website} target="_blank" rel="noreferrer" className="text-primary opacity-0 group-hover:opacity-100 transition-opacity"><span className="material-symbols-outlined" style={{ fontSize: '14px' }}>open_in_new</span></a>}
+                    {/* RECENTLY CHANGED: Added click handler, styling, and map icon if coordinates exist */}
+                    <span 
+                      className={`font-bold text-sm truncate max-w-[220px] block ${l.lat && l.lng ? 'text-slate-900 cursor-pointer hover:text-primary hover:underline' : 'text-slate-900'}`}
+                      onClick={() => { if(l.lat && l.lng) onLocate(l); }}
+                      title={l.lat && l.lng ? "View exact location on Map" : ""}
+                    >
+                      {l.name}
+                    </span>
+                    {l.lat && l.lng && (
+                      <span className="material-symbols-outlined text-primary/40 cursor-pointer hover:text-primary transition-colors" style={{ fontSize: '14px' }} onClick={() => onLocate(l)} title="View on Map">location_on</span>
+                    )}
                   </div>
-                  <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-[220px]">{urlObj ? <a href={l.website} target="_blank" rel="noreferrer" className="hover:text-primary">{urlObj}</a> : <span className="text-slate-300">no website</span>}</p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-[220px]">
+                    {urlObj ? (
+                      <a href={l.website} target="_blank" rel="noreferrer" className="hover:text-primary flex items-center gap-1">
+                        {urlObj} <span className="material-symbols-outlined opacity-0 group-hover:opacity-100 transition-opacity" style={{ fontSize: '12px' }}>open_in_new</span>
+                      </a>
+                    ) : <span className="text-slate-300">no website</span>}
+                  </p>
                 </td>
                 <td className="px-4 py-4">
                   <span className="inline-block rounded-full bg-primary/10 text-primary px-2.5 py-1 text-[9px] font-black uppercase tracking-wider whitespace-nowrap max-w-[130px] overflow-hidden text-ellipsis border border-primary/10">{l.category}</span>

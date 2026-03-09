@@ -13,14 +13,12 @@ export default function LeadDashboard() {
   const [syncStatus, setSyncStatus] = useState('synced');
   const [isCalOpen, setIsCalOpen] = useState(false);
   
-  // Admin states
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminKey, setAdminKey] = useState("");
 
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
-  // RECENTLY CHANGED: All table states are now lifted here so they don't reset when changing tabs!
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('all');
@@ -32,7 +30,7 @@ export default function LeadDashboard() {
     ratingMin: 0,
     ratingMax: 5,
     reviewsMin: 0,
-    reviewsMax: 5000 // Matches MAX_REVIEWS_SLIDER
+    reviewsMax: 5000 
   });
 
   const [dailyData, setDailyData] = useState({
@@ -40,6 +38,9 @@ export default function LeadDashboard() {
     goal: 10,
     counts: { job: 0, build_no_demo: 0, build_demo: 0 }
   });
+
+  // RECENTLY CHANGED: Added state to track which lead we want to zoom to on the map
+  const [selectedMapLead, setSelectedMapLead] = useState(null);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -168,6 +169,16 @@ export default function LeadDashboard() {
     a.click();
   };
 
+  // RECENTLY CHANGED: Function to handle when you click a map pin on the Table
+  const handleLocateOnMap = (lead) => {
+    if (!lead.lat || !lead.lng) {
+      alert("No map coordinates available for this lead.");
+      return;
+    }
+    setSelectedMapLead(lead);
+    setActiveView('dashboard');
+  };
+
   const NavItems = [
     { id: 'dashboard', icon: 'dashboard', label: 'Home' },
     { id: 'leads', icon: 'view_list', label: 'Directory' },
@@ -238,9 +249,9 @@ export default function LeadDashboard() {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 lg:pb-0 w-full">
-          {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} onOpenCalendar={() => setIsCalOpen(true)} />}
+          {/* RECENTLY CHANGED: Passed selectedMapLead to DashboardAnalytics */}
+          {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} selectedMapLead={selectedMapLead} onOpenCalendar={() => setIsCalOpen(true)} />}
           
-          {/* RECENTLY CHANGED: Feeding all the persistent state variables down into the table */}
           {activeView === 'leads' && (
             <LeadTable 
               leads={leads} 
@@ -259,6 +270,9 @@ export default function LeadDashboard() {
               perPage={perPage} setPerPage={setPerPage}
               copyMode={copyMode} setCopyMode={setCopyMode}
               rangeFilters={rangeFilters} setRangeFilters={setRangeFilters}
+
+              // RECENTLY CHANGED: Passed onLocate handler down to the table
+              onLocate={handleLocateOnMap}
             />
           )}
           

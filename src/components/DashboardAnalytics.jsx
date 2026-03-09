@@ -1,11 +1,25 @@
-import React, { useMemo } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import React, { useMemo, useEffect } from 'react';
+// RECENTLY CHANGED: Imported useMap to control the camera programmatically
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+
+// RECENTLY CHANGED: Invisible child component that performs the fly-to animation
+function MapController({ selectedLead }) {
+  const map = useMap();
+  useEffect(() => {
+    if (selectedLead && selectedLead.lat && selectedLead.lng) {
+      // Zooms in close (level 15) and smoothly animates to the marker
+      map.flyTo([selectedLead.lat, selectedLead.lng], 15, { animate: true, duration: 1.5 });
+    }
+  }, [selectedLead, map]);
+  return null;
+}
 
 export default function DashboardAnalytics({ 
   leads, 
   dailyData = { goal: 10, counts: { job: 0, build_no_demo: 0, build_demo: 0 } }, 
   dataSource = "cloud",
+  selectedMapLead, // RECENTLY CHANGED: Added prop to receive the clicked lead
   onOpenCalendar 
 }) {
   
@@ -94,9 +108,7 @@ export default function DashboardAnalytics({
   const dailyTotal = todayJob + todayBuild + todayBuildPlus;
   const dailyPct = Math.min(100, Math.round((dailyTotal / (dailyData.goal || 10)) * 100));
 
-  // RECENTLY CHANGED: Smart Map Renderer that cross-references duplicate leads to salvage manual tags
   const mappableLeads = useMemo(() => {
-    // 1. Build a dictionary of every single status you've ever applied, keyed by the Business Name
     const statusByName = {};
     leads.forEach(l => {
       if (l.status && l.status !== 'none' && l.name) {
@@ -104,19 +116,15 @@ export default function DashboardAnalytics({
       }
     });
 
-    // 2. Filter for the new leads that actually have map coordinates
     const validLeads = leads.filter(l => l.lat && l.lng && !isNaN(l.lat) && !isNaN(l.lng));
     
-    // 3. Inject your old tags into the new map dots!
     return validLeads.map(l => {
        const key = l.name ? l.name.toLowerCase().trim() : '';
        return {
            ...l,
-           // If it's untagged, but the dictionary found a tag under the same name, use it!
            status: (l.status !== 'none') ? l.status : (statusByName[key] || 'none')
        };
     }).sort((a, b) => {
-      // 4. Sort them so the colored (tagged) dots are drawn ON TOP of the grey ones
       const getPriority = (status) => {
         if (['job', 'build', 'build_plus'].includes(status)) return 2; 
         if (status === 'dismissed') return 1; 
@@ -296,6 +304,9 @@ export default function DashboardAnalytics({
                 attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
               />
               
+              {/* RECENTLY CHANGED: Injected the MapController that handles the dynamic zooming */}
+              <MapController selectedLead={selectedMapLead} />
+
               {mappableLeads.map(l => (
                 <CircleMarker 
                   key={l.id} 

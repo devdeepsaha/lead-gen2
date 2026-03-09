@@ -5,7 +5,6 @@ import LeadTableMobile from './LeadTableMobile';
 import LeadTablePagination from './LeadTablePagination';
 import { TEMPLATES } from '../data/templates';
 
-// RECENTLY CHANGED: Removed local state declarations and added them to props
 export default function LeadTable({ 
   leads = [], isAdmin = false, setLeads, 
   dailyData, setDailyData, outreachLog = [], setOutreachLog,
@@ -17,7 +16,9 @@ export default function LeadTable({
   page, setPage,
   perPage, setPerPage,
   copyMode, setCopyMode,
-  rangeFilters, setRangeFilters
+  rangeFilters, setRangeFilters,
+
+  onLocate // RECENTLY CHANGED: Added prop to receive the map function
 }) {
   
   const [toastMsg, setToastMsg] = useState(null);
@@ -37,32 +38,25 @@ export default function LeadTable({
 
   const filteredLeads = useMemo(() => {
     let arr = leads.filter((l) => {
-      // 1. Status Filter
       if (statusFilter === "replied") {
         if (!l.replied) return false;
       } else if (statusFilter !== "all" && l.status !== statusFilter) {
         return false;
       }
-      
-      // 2. Category Filter
       if (catFilter !== "all" && l.category !== catFilter) return false;
 
-      // 3. Range Filters (Rating & Reviews)
       const r = l.rating || 0;
       const rev = l.reviews || 0;
       if (r < rangeFilters.ratingMin || r > rangeFilters.ratingMax) return false;
-      
       if (rev < rangeFilters.reviewsMin) return false;
       if (rangeFilters.reviewsMax < MAX_REVIEWS_SLIDER && rev > rangeFilters.reviewsMax) return false;
       
-      // 4. Text Search Filter
       if (searchQuery) {
         const q = String(searchQuery).toLowerCase();
         const n = String(l.name || '').toLowerCase();
         const p = String(l.phone || '').toLowerCase();
         const e = String(l.email || '').toLowerCase();
         const c = String(l.category || '').toLowerCase();
-        
         if (!n.includes(q) && !p.includes(q) && !e.includes(q) && !c.includes(q)) return false;
       }
       return true;
@@ -161,12 +155,14 @@ export default function LeadTable({
         isAdmin={isAdmin} copyMode={copyMode}
         handleStatusClick={handleStatusClick} handleCopyTemplate={handleCopyTemplate}
         handleEmailCopy={handleEmailCopy} updateLead={updateLead}
+        onLocate={onLocate} // RECENTLY CHANGED: Passed map handler down
       />
 
       <LeadTableMobile 
         paginatedLeads={paginatedLeads} isAdmin={isAdmin} copyMode={copyMode}
         handleStatusClick={handleStatusClick} handleCopyTemplate={handleCopyTemplate}
         handleEmailCopy={handleEmailCopy} updateLead={updateLead}
+        onLocate={onLocate} // RECENTLY CHANGED: Passed map handler down
       />
 
       <LeadTablePagination 
