@@ -87,15 +87,8 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
   };
 
   const handleFile = (file) => {
-    if (!isAdmin) {
-      setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
-      return;
-    }
-
-    if (!file || !file.name.endsWith('.csv')) {
-      setUploadStatus({ msg: 'Please drop a valid .csv file', type: 'error' });
-      return;
-    }
+    if (!isAdmin) return setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
+    if (!file || !file.name.endsWith('.csv')) return setUploadStatus({ msg: 'Please drop a valid .csv file', type: 'error' });
     
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -106,18 +99,14 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         setUploadStatus({ msg: `Parsed ${parsed.length} rows — staging data in memory...`, type: 'loading' });
         
         const existingMap = new Map(leads.map(l => [l.id, l]));
-        let addedCount = 0;
-        let updatedCount = 0;
+        let addedCount = 0, updatedCount = 0;
 
         parsed.forEach(parsedLead => {
           if (existingMap.has(parsedLead.id)) {
             const existingLead = existingMap.get(parsedLead.id);
             existingMap.set(parsedLead.id, {
-              ...existingLead,             
-              ...parsedLead,               
-              status: existingLead.status, 
-              replied: existingLead.replied, 
-              checked: existingLead.checked
+              ...existingLead, ...parsedLead,               
+              status: existingLead.status, replied: existingLead.replied, checked: existingLead.checked
             });
             updatedCount++;
           } else {
@@ -130,10 +119,9 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         setLeads(newLeadsArray); 
         
         setUploadStatus({ 
-          msg: `✅ Loaded ${addedCount} new leads and updated ${updatedCount} in memory. Please click 'Smart Deduplicate' to clean and save!`, 
+          msg: `✅ Loaded ${addedCount} new leads and updated ${updatedCount}. Click 'Smart Deduplicate' to clean!`, 
           type: 'success' 
         });
-        
       } catch (err) {
         setUploadStatus({ msg: `❌ Upload failed: ${err.message}`, type: 'error' });
       }
@@ -150,10 +138,9 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     handleFile(e.dataTransfer.files[0]);
   };
 
-  // RECENTLY CHANGED: This function now pushes to Vercel KV AND triggers a download of the perfect fallback file!
   const handleSmartCleanup = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to clean the database.");
-    if (!window.confirm("This will scan for duplicates, merge their data, push to the cloud, AND download a file to permanently fix your codebase. Proceed?")) return;
+    if (!window.confirm("This will scan for duplicates, merge their data, and download a file to permanently fix your codebase. Proceed?")) return;
 
     setUploadStatus({ msg: "Cleaning duplicates and saving...", type: "loading" });
 
@@ -162,22 +149,16 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
 
     leads.forEach(lead => {
       const key = lead.name.toLowerCase().trim();
-      
       if (uniqueMap.has(key)) {
         removedCount++;
         const existing = uniqueMap.get(key);
-
         let bestStatus = existing.status;
         if (existing.status === 'none' && lead.status !== 'none') bestStatus = lead.status;
 
         uniqueMap.set(key, {
-          ...existing,
-          status: bestStatus,
-          replied: existing.replied || lead.replied,
-          phone: existing.phone || lead.phone,
-          email: existing.email || lead.email,
-          lat: existing.lat || lead.lat,
-          lng: existing.lng || lead.lng
+          ...existing, status: bestStatus, replied: existing.replied || lead.replied,
+          phone: existing.phone || lead.phone, email: existing.email || lead.email,
+          lat: existing.lat || lead.lat, lng: existing.lng || lead.lng
         });
       } else {
         uniqueMap.set(key, { ...lead });
@@ -188,16 +169,12 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     setLeads(cleanedLeads);
 
     try {
-      // 1. Push to cloud
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cleanedLeads) 
       });
 
-      if (!res.ok) throw new Error(`Server returned ${res.status}.`);
-
-      // 2. Automatically download the pristine fallback file so you can eradicate the 1899 duplicates permanently!
       const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleanedLeads, null, 2)};\n\nexport default FALLBACK_LEADS;`;
       const blob = new Blob([fileContent], { type: 'application/javascript' });
       const url = URL.createObjectURL(blob);
@@ -207,21 +184,18 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       a.click();
       URL.revokeObjectURL(url);
 
-      setUploadStatus({ 
-        msg: `✅ Success! Removed ${removedCount} duplicates. Cloud updated. PLEASE SWAP the downloaded file into your codebase!`, 
-        type: 'success' 
-      });
+      if (!res.ok) throw new Error(`Server returned ${res.status}. Cloud ignored it, but local file is downloaded!`);
 
+      setUploadStatus({ msg: `✅ Success! Removed ${removedCount} duplicates. Cloud updated.`, type: 'success' });
     } catch (err) {
-      setUploadStatus({ msg: `❌ Cloud save failed: ${err.message}`, type: 'error' });
+      setUploadStatus({ msg: `⚠️ Cloud rejected the save, BUT your pristine file was downloaded! Swap it into your code!`, type: 'warning' });
     }
   };
 
   const saveDailyGoal = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to change the daily goal.");
     const val = Math.max(1, Math.min(200, goalInput));
-    const newDaily = { ...dailyData, goal: val };
-    setDailyData(newDaily);
+    setDailyData({ ...dailyData, goal: val });
     alert(`🎯 Goal set to ${val}/day`);
   };
 
@@ -238,14 +212,29 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
   const resetAllStatuses = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to reset statuses.");
     if (!window.confirm("Reset ALL status tags on all devices? This will wipe your progress.")) return;
-    const newLeads = leads.map(l => ({ ...l, status: 'none', replied: false }));
-    setLeads(newLeads);
+    setLeads(leads.map(l => ({ ...l, status: 'none', replied: false })));
   };
 
-  const resetLeadsData = () => {
+  // RECENTLY CHANGED: This is the Nuclear Cloud Wipe button. It forces an empty array into Vercel KV.
+  const resetLeadsData = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to wipe the database.");
-    if (!window.confirm("Wipe ALL leads from memory? This removes them entirely and cannot be undone.")) return;
-    setLeads([]);
+    if (!window.confirm("NUKE THE CLOUD? This will delete the stubborn 1899 leads from Vercel KV so your app can finally use your clean local file. Proceed?")) return;
+    
+    try {
+      setUploadStatus({ msg: "Nuking cloud data...", type: "loading" });
+      
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([]) // Sends exactly 0 leads to the cloud to overwrite the stuck payload
+      });
+
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+      setUploadStatus({ msg: "✅ Cloud Database Wiped! Please refresh the page now.", type: "success" });
+    } catch (err) {
+      setUploadStatus({ msg: `❌ Failed to wipe cloud: ${err.message}`, type: 'error' });
+    }
   };
 
   return (
@@ -286,7 +275,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           </div>
           
           {uploadStatus.msg && (
-            <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : uploadStatus.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+            <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : uploadStatus.type === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-100' : uploadStatus.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
               {uploadStatus.msg}
             </div>
           )}
@@ -306,7 +295,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
             </button>
             
             <button onClick={handleSmartCleanup} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 mt-2 rounded-lg text-white text-sm font-bold transition-all ${isAdmin ? 'bg-blue-500 hover:bg-blue-600 shadow-md shadow-blue-500/20' : 'bg-slate-300 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>cleaning_services</span> Smart Deduplicate (Cloud)
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>cleaning_services</span> Smart Deduplicate
             </button>
           </div>
         </div>
@@ -317,7 +306,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
             <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
             <div className="flex justify-between"><span>Tagged</span><span className="font-bold text-emerald-600">{stats.tagged}</span></div>
             <div className="flex justify-between"><span>Categories</span><span className="font-bold text-slate-800">{stats.categories}</span></div>
-            <div className="flex justify-between"><span>Data source</span><span className="font-bold text-primary">Vercel KV Cloud</span></div>
+            <div className="flex justify-between"><span>Data source</span><span className="font-bold text-primary">Live Dashboard Status</span></div>
             
             <div className="pt-3 border-t border-slate-100">
               <div className="flex justify-between items-end mb-1.5">
@@ -346,7 +335,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete_forever</span> Reset all status tags
             </button>
             <button onClick={resetLeadsData} disabled={!isAdmin} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>database</span> Wipe leads from memory
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>bomb</span> Wipe leads from cloud
             </button>
           </div>
         </div>
