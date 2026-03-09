@@ -20,6 +20,9 @@ export default function LeadDashboard() {
   const [syncStatus, setSyncStatus] = useState('synced');
   const [isCalOpen, setIsCalOpen] = useState(false);
   
+  // RECENTLY CHANGED: Added state to track exactly where the data is coming from
+  const [dataSource, setDataSource] = useState("Loading...");
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminKey, setAdminKey] = useState("");
 
@@ -56,43 +59,20 @@ export default function LeadDashboard() {
         setShowShortcutsHelp(false);
         return;
       }
-
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       const key = e.key.toLowerCase();
 
-      if (e.key === '?') {
-        e.preventDefault();
-        setShowShortcutsHelp(prev => !prev);
-      }
-
-      if (key === 'c') {
-        e.preventDefault();
-        setSearchQuery('');
-      }
-      
-      if (key === 's') {
-        e.preventDefault();
-        setRangeFilters({ ratingMin: 3.5, ratingMax: 4.5, reviewsMin: 50, reviewsMax: 5000 });
-        setPage(1);
-        setActiveView('leads'); 
-      }
-
-      if (key === 'r') {
-        e.preventDefault();
-        setRangeFilters({ ratingMin: 0, ratingMax: 5, reviewsMin: 0, reviewsMax: 5000 });
-        setPage(1);
-      }
-
+      if (e.key === '?') { e.preventDefault(); setShowShortcutsHelp(prev => !prev); }
+      if (key === 'c') { e.preventDefault(); setSearchQuery(''); }
+      if (key === 's') { e.preventDefault(); setRangeFilters({ ratingMin: 3.5, ratingMax: 4.5, reviewsMin: 50, reviewsMax: 5000 }); setPage(1); setActiveView('leads'); }
+      if (key === 'r') { e.preventDefault(); setRangeFilters({ ratingMin: 0, ratingMax: 5, reviewsMin: 0, reviewsMax: 5000 }); setPage(1); }
       if (key === 'p') {
         e.preventDefault();
         const targetPage = prompt("Go to page number:");
         if (targetPage !== null) {
           const parsed = parseInt(targetPage, 10);
-          if (!isNaN(parsed) && parsed > 0) {
-            setPage(parsed);
-            setActiveView('leads'); 
-          }
+          if (!isNaN(parsed) && parsed > 0) { setPage(parsed); setActiveView('leads'); }
         }
       }
     };
@@ -109,8 +89,6 @@ export default function LeadDashboard() {
       let fetchedOutreach = [];
 
       try {
-        // RECENTLY CHANGED: Added Cache-Busting (?t=...) and strictly disabled Vercel's memory cache
-        // This forces the website to download the real, freshly cleaned database on every refresh
         const timestamp = Date.now();
         const [lRes, sRes] = await Promise.all([
           fetch(`/api/leads?t=${timestamp}`, { cache: 'no-store' }).catch(() => null),
@@ -126,8 +104,17 @@ export default function LeadDashboard() {
         }
       } catch (err) { console.error(err); }
 
-      const baseLeads = (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) ? fetchedLeads : FALLBACK_LEADS;
+      // RECENTLY CHANGED: Smart logic to determine if we are using the cloud or the local file
+      let baseLeads = FALLBACK_LEADS;
+      let sourceLabel = "Local Fallback File";
+
+      if (Array.isArray(fetchedLeads) && fetchedLeads.length > 0) {
+        baseLeads = fetchedLeads;
+        sourceLabel = "Vercel KV Cloud";
+      }
       
+      setDataSource(sourceLabel);
+
       const mergedLeads = baseLeads.map(l => ({
         ...l,
         id: String(l.id),
@@ -203,7 +190,6 @@ export default function LeadDashboard() {
     if (!deletedEntry) return;
 
     const updatedLog = outreachLog.filter(e => e.ts !== timestamp);
-    
     const today = getLocalDateString();
     const entryDate = getLocalDateString(new Date(deletedEntry.ts));
     
@@ -381,7 +367,8 @@ export default function LeadDashboard() {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 lg:pb-0 w-full">
-          {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} selectedMapLead={selectedMapLead} onViewInDirectory={handleViewInDirectory} onOpenCalendar={() => setIsCalOpen(true)} />}
+          {/* RECENTLY CHANGED: Passed dataSource down to Analytics */}
+          {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} selectedMapLead={selectedMapLead} dataSource={dataSource} onViewInDirectory={handleViewInDirectory} onOpenCalendar={() => setIsCalOpen(true)} />}
           
           {activeView === 'leads' && (
             <LeadTable 

@@ -5,19 +5,17 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState({ msg: '', type: '' });
 
-  // RECENTLY CHANGED: Added real-time calculation of the JSON payload size in KB/MB
   const stats = useMemo(() => {
     const tagged = leads.filter(l => ['job', 'build', 'build_plus'].includes(l.status)).length;
     const categories = new Set(leads.map(l => l.category)).size;
     
-    // Calculate exact byte size of the payload being sent to Vercel
     const payloadString = JSON.stringify(leads);
     const bytes = new Blob([payloadString]).size;
     const kb = bytes / 1024;
     const mb = bytes / (1024 * 1024);
     
     const sizeDisplay = bytes > 1024 * 1024 ? `${mb.toFixed(2)} MB` : `${kb.toFixed(1)} KB`;
-    const percentOfLimit = Math.min(100, Math.round((kb / 1024) * 100)); // Based on 1MB (1024KB) strict limit
+    const percentOfLimit = Math.min(100, Math.round((kb / 1024) * 100)); 
 
     return { total: leads.length, tagged, categories, sizeDisplay, percentOfLimit, kb };
   }, [leads]);
@@ -129,11 +127,10 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         });
         
         const newLeadsArray = Array.from(existingMap.values());
-        
         setLeads(newLeadsArray); 
         
         setUploadStatus({ 
-          msg: `✅ Loaded ${addedCount} new leads and updated ${updatedCount} in memory. Please click 'Smart Deduplicate' to clean and save to the cloud!`, 
+          msg: `✅ Loaded ${addedCount} new leads and updated ${updatedCount} in memory. Please click 'Smart Deduplicate' to clean and save!`, 
           type: 'success' 
         });
         
@@ -153,11 +150,12 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     handleFile(e.dataTransfer.files[0]);
   };
 
+  // RECENTLY CHANGED: This function now pushes to Vercel KV AND triggers a download of the perfect fallback file!
   const handleSmartCleanup = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to clean the database.");
-    if (!window.confirm("This will scan for duplicates, merge their contact info/tags, and push the cleaned database to Vercel. Proceed?")) return;
+    if (!window.confirm("This will scan for duplicates, merge their data, push to the cloud, AND download a file to permanently fix your codebase. Proceed?")) return;
 
-    setUploadStatus({ msg: "Cleaning duplicates and saving to cloud...", type: "loading" });
+    setUploadStatus({ msg: "Cleaning duplicates and saving...", type: "loading" });
 
     const uniqueMap = new Map();
     let removedCount = 0;
@@ -187,20 +185,30 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     });
 
     const cleanedLeads = Array.from(uniqueMap.values());
-    
     setLeads(cleanedLeads);
 
     try {
+      // 1. Push to cloud
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cleanedLeads) 
       });
 
-      if (!res.ok) throw new Error(`Server returned ${res.status}. The payload might still be too large for free tier.`);
+      if (!res.ok) throw new Error(`Server returned ${res.status}.`);
+
+      // 2. Automatically download the pristine fallback file so you can eradicate the 1899 duplicates permanently!
+      const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleanedLeads, null, 2)};\n\nexport default FALLBACK_LEADS;`;
+      const blob = new Blob([fileContent], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fallback-leads-cleaned.js';
+      a.click();
+      URL.revokeObjectURL(url);
 
       setUploadStatus({ 
-        msg: `✅ Cleanup complete! Removed ${removedCount} duplicates and saved pristine data to Vercel KV cloud.`, 
+        msg: `✅ Success! Removed ${removedCount} duplicates. Cloud updated. PLEASE SWAP the downloaded file into your codebase!`, 
         type: 'success' 
       });
 
@@ -303,7 +311,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           </div>
         </div>
 
-        {/* RECENTLY CHANGED: Updated Current Dataset section with live payload size tracker */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
           <h3 className="font-bold text-sm mb-3">Current Dataset</h3>
           <div className="space-y-3 text-xs text-slate-500">
