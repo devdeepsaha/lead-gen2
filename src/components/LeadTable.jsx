@@ -5,24 +5,24 @@ import LeadTableMobile from './LeadTableMobile';
 import LeadTablePagination from './LeadTablePagination';
 import { TEMPLATES } from '../data/templates';
 
+// RECENTLY CHANGED: Removed local state declarations and added them to props
 export default function LeadTable({ 
-  leads = [], isAdmin = false, setLeads, searchQuery = '', setSearchQuery, 
-  dailyData, setDailyData, outreachLog = [], setOutreachLog    
+  leads = [], isAdmin = false, setLeads, 
+  dailyData, setDailyData, outreachLog = [], setOutreachLog,
+  
+  searchQuery, setSearchQuery,
+  statusFilter, setStatusFilter,
+  catFilter, setCatFilter,
+  sortType, setSortType,
+  page, setPage,
+  perPage, setPerPage,
+  copyMode, setCopyMode,
+  rangeFilters, setRangeFilters
 }) {
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [catFilter, setCatFilter] = useState('all');
-  const [sortType, setSortType] = useState('default');
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(15);
-  const [copyMode, setCopyMode] = useState('email'); 
+  
   const [toastMsg, setToastMsg] = useState(null);
 
-  const [rangeFilters, setRangeFilters] = useState({
-    ratingMin: 0,
-    ratingMax: 5,
-    reviewsMin: 0,
-    reviewsMax: 1000000
-  });
+  const MAX_REVIEWS_SLIDER = 5000;
 
   const showToast = (msg) => {
     setToastMsg(msg);
@@ -47,11 +47,13 @@ export default function LeadTable({
       // 2. Category Filter
       if (catFilter !== "all" && l.category !== catFilter) return false;
 
-      // 3. Range Filters
+      // 3. Range Filters (Rating & Reviews)
       const r = l.rating || 0;
       const rev = l.reviews || 0;
       if (r < rangeFilters.ratingMin || r > rangeFilters.ratingMax) return false;
-      if (rev < rangeFilters.reviewsMin || rev > rangeFilters.reviewsMax) return false;
+      
+      if (rev < rangeFilters.reviewsMin) return false;
+      if (rangeFilters.reviewsMax < MAX_REVIEWS_SLIDER && rev > rangeFilters.reviewsMax) return false;
       
       // 4. Text Search Filter
       if (searchQuery) {
@@ -115,14 +117,8 @@ export default function LeadTable({
       setOutreachLog([newEntry, ...outreachLog]);
 
       const today = new Date().toISOString().split('T')[0];
-      
-      // RECENTLY CHANGED: This guarantees the first copy of the day resets the tracking counts
-      let newCounts = dailyData.date === today 
-        ? { ...dailyData.counts } 
-        : { job: 0, build_no_demo: 0, build_demo: 0 };
-        
+      let newCounts = dailyData.date === today ? { ...dailyData.counts } : { job: 0, build_no_demo: 0, build_demo: 0 };
       if (newCounts[actualTplKey] !== undefined) newCounts[actualTplKey]++;
-      
       setDailyData({ ...dailyData, date: today, counts: newCounts });
     };
 

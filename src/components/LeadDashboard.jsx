@@ -19,7 +19,21 @@ export default function LeadDashboard() {
 
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // RECENTLY CHANGED: All table states are now lifted here so they don't reset when changing tabs!
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [catFilter, setCatFilter] = useState('all');
+  const [sortType, setSortType] = useState('default');
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(15);
+  const [copyMode, setCopyMode] = useState('email'); 
+  const [rangeFilters, setRangeFilters] = useState({
+    ratingMin: 0,
+    ratingMax: 5,
+    reviewsMin: 0,
+    reviewsMax: 5000 // Matches MAX_REVIEWS_SLIDER
+  });
 
   const [dailyData, setDailyData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -65,7 +79,6 @@ export default function LeadDashboard() {
     initializeApp();
   }, []);
 
-  // RECENTLY CHANGED: Bulletproof sync function that accepts the currentKey directly to prevent Stale Closures
   const syncToCloud = async (updatedLeads, updatedDaily, updatedOutreach, currentKey) => {
     try {
       if (!Array.isArray(updatedLeads)) return;
@@ -80,7 +93,7 @@ export default function LeadDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          auth: currentKey, // Uses the fresh key passed directly from the handler
+          auth: currentKey,
           statuses,
           daily: updatedDaily || dailyData,
           outreach: updatedOutreach || outreachLog,
@@ -105,7 +118,6 @@ export default function LeadDashboard() {
     }
   };
 
-  // Safe handler functions explicitly passing the adminKey
   const handleUpdateLeads = (newLeads) => {
     setLeads(newLeads);
     syncToCloud(newLeads, dailyData, outreachLog, adminKey);
@@ -174,7 +186,6 @@ export default function LeadDashboard() {
         </div>
       )}
 
-      {/* ── UNIFIED HEADER ── */}
       <header className="flex-shrink-0 flex items-center justify-between border-b border-primary/10 bg-white px-4 lg:px-6 py-3 z-30 shadow-sm lg:shadow-none">
         <div className="flex items-center gap-3 lg:gap-6">
           <div className="flex items-center gap-2 lg:gap-3">
@@ -209,7 +220,6 @@ export default function LeadDashboard() {
         </div>
       </header>
 
-      {/* ── UNIFIED BODY ── */}
       <div className="flex flex-1 overflow-hidden relative">
         <aside className={`hidden lg:flex flex-col border-r border-primary/10 bg-white transition-all duration-300 z-20`} style={{ width: sidebarCollapsed ? '72px' : '240px' }}>
           <div className="flex items-center justify-center p-4">
@@ -230,17 +240,25 @@ export default function LeadDashboard() {
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 lg:pb-0 w-full">
           {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} onOpenCalendar={() => setIsCalOpen(true)} />}
           
+          {/* RECENTLY CHANGED: Feeding all the persistent state variables down into the table */}
           {activeView === 'leads' && (
             <LeadTable 
               leads={leads} 
               isAdmin={isAdmin} 
               setLeads={handleUpdateLeads} 
-              searchQuery={searchQuery} 
-              setSearchQuery={setSearchQuery} 
               dailyData={dailyData} 
               setDailyData={handleUpdateDaily} 
               outreachLog={outreachLog}
               setOutreachLog={handleUpdateOutreach}
+              
+              searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+              statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+              catFilter={catFilter} setCatFilter={setCatFilter}
+              sortType={sortType} setSortType={setSortType}
+              page={page} setPage={setPage}
+              perPage={perPage} setPerPage={setPerPage}
+              copyMode={copyMode} setCopyMode={setCopyMode}
+              rangeFilters={rangeFilters} setRangeFilters={setRangeFilters}
             />
           )}
           
