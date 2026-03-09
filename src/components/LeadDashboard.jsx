@@ -39,7 +39,6 @@ export default function LeadDashboard() {
     counts: { job: 0, build_no_demo: 0, build_demo: 0 }
   });
 
-  // RECENTLY CHANGED: Added state to track which lead we want to zoom to on the map
   const [selectedMapLead, setSelectedMapLead] = useState(null);
 
   useEffect(() => {
@@ -169,14 +168,22 @@ export default function LeadDashboard() {
     a.click();
   };
 
-  // RECENTLY CHANGED: Function to handle when you click a map pin on the Table
+  // RECENTLY CHANGED: Added timestamp so clicking the same lead twice still triggers the map zoom!
   const handleLocateOnMap = (lead) => {
     if (!lead.lat || !lead.lng) {
       alert("No map coordinates available for this lead.");
       return;
     }
-    setSelectedMapLead(lead);
+    setSelectedMapLead({ ...lead, _triggerTime: Date.now() }); 
     setActiveView('dashboard');
+  };
+
+  // RECENTLY CHANGED: New function to jump from the Map Popup directly into the Directory search
+  const handleViewInDirectory = (lead) => {
+    setSearchQuery(lead.name);  // Auto-fill the search bar
+    setStatusFilter('all');     // Clear other filters so it definitely shows up
+    setCatFilter('all');
+    setActiveView('leads');     // Switch to the table tab
   };
 
   const NavItems = [
@@ -249,8 +256,8 @@ export default function LeadDashboard() {
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 lg:pb-0 w-full">
-          {/* RECENTLY CHANGED: Passed selectedMapLead to DashboardAnalytics */}
-          {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} selectedMapLead={selectedMapLead} onOpenCalendar={() => setIsCalOpen(true)} />}
+          {/* RECENTLY CHANGED: Passed onViewInDirectory down to the Dashboard */}
+          {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} selectedMapLead={selectedMapLead} onViewInDirectory={handleViewInDirectory} onOpenCalendar={() => setIsCalOpen(true)} />}
           
           {activeView === 'leads' && (
             <LeadTable 
@@ -270,8 +277,6 @@ export default function LeadDashboard() {
               perPage={perPage} setPerPage={setPerPage}
               copyMode={copyMode} setCopyMode={setCopyMode}
               rangeFilters={rangeFilters} setRangeFilters={setRangeFilters}
-
-              // RECENTLY CHANGED: Passed onLocate handler down to the table
               onLocate={handleLocateOnMap}
             />
           )}

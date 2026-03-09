@@ -1,17 +1,23 @@
-import React, { useMemo, useEffect } from 'react';
-// RECENTLY CHANGED: Imported useMap to control the camera programmatically
+import React, { useMemo, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// RECENTLY CHANGED: Invisible child component that performs the fly-to animation
-function MapController({ selectedLead }) {
+// RECENTLY CHANGED: The MapController now handles zooming AND automatically opening the popup!
+function MapController({ selectedLead, markerRefs }) {
   const map = useMap();
   useEffect(() => {
     if (selectedLead && selectedLead.lat && selectedLead.lng) {
-      // Zooms in close (level 15) and smoothly animates to the marker
-      map.flyTo([selectedLead.lat, selectedLead.lng], 15, { animate: true, duration: 1.5 });
+      // 1. Smoothly fly to the location
+      map.flyTo([selectedLead.lat, selectedLead.lng], 16, { animate: true, duration: 1.5 });
+      
+      // 2. Open the popup associated with this specific lead
+      const marker = markerRefs.current[selectedLead.id];
+      if (marker) {
+        // Slight delay to allow the map to start moving before popping it open
+        setTimeout(() => marker.openPopup(), 200);
+      }
     }
-  }, [selectedLead, map]);
+  }, [selectedLead, map, markerRefs]);
   return null;
 }
 
@@ -19,10 +25,22 @@ export default function DashboardAnalytics({
   leads, 
   dailyData = { goal: 10, counts: { job: 0, build_no_demo: 0, build_demo: 0 } }, 
   dataSource = "cloud",
-  selectedMapLead, // RECENTLY CHANGED: Added prop to receive the clicked lead
+  selectedMapLead, 
+  onViewInDirectory, // RECENTLY CHANGED: Added new prop
   onOpenCalendar 
 }) {
   
+  // RECENTLY CHANGED: Refs to scroll the page and trigger popups programmatically
+  const mapSectionRef = useRef(null);
+  const markerRefs = useRef({});
+
+  // Auto-scroll the entire page down to the map when a lead is clicked from the table
+  useEffect(() => {
+    if (selectedMapLead && mapSectionRef.current) {
+      mapSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [selectedMapLead]);
+
   const stats = useMemo(() => {
     const job = leads.filter(l => l.status === "job").length;
     const build = leads.filter(l => l.status === "build").length;
@@ -145,7 +163,7 @@ export default function DashboardAnalytics({
   };
 
   return (
-    <div id="view-dashboard" className="flex-1 p-4 lg:p-6 overflow-y-auto flex flex-col">
+    <div id="view-dashboard" className="flex-1 p-4 lg:p-6 overflow-y-auto flex flex-col scroll-smooth">
       <div className="mb-5 hidden lg:block">
         <h1 className="text-2xl font-black tracking-tight">Dashboard Analytics</h1>
         <p className="text-sm text-slate-500">
@@ -282,7 +300,8 @@ export default function DashboardAnalytics({
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-4">
+      {/* RECENTLY CHANGED: Added ref here to allow auto-scrolling */}
+      <div ref={mapSectionRef} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-4">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white z-10">
           <div>
             <h3 className="text-base font-bold text-slate-800">Geographic Distribution</h3>
@@ -304,14 +323,14 @@ export default function DashboardAnalytics({
                 attribution='&copy; <a href="https://carto.com/attributions">CARTO</a>'
               />
               
-              {/* RECENTLY CHANGED: Injected the MapController that handles the dynamic zooming */}
-              <MapController selectedLead={selectedMapLead} />
+              <MapController selectedLead={selectedMapLead} markerRefs={markerRefs} />
 
               {mappableLeads.map(l => (
                 <CircleMarker 
                   key={l.id} 
                   center={[l.lat, l.lng]} 
-                  radius={6} 
+                  radius={6}
+                  ref={(r) => { markerRefs.current[l.id] = r; }} // Maps the exact DOM element to this lead
                   pathOptions={{ 
                     color: getStatusColor(l.status), 
                     fillColor: getStatusColor(l.status), 
@@ -320,12 +339,22 @@ export default function DashboardAnalytics({
                   }}
                 >
                   <Popup className="rounded-lg">
-                    <div className="font-display">
+                    <div className="font-display min-w-[150px]">
                       <p className="font-bold text-slate-800 text-sm mb-1">{l.name}</p>
                       <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">{l.category}</p>
                       <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase" style={{ backgroundColor: getStatusColor(l.status) }}>
                         {l.status === 'none' ? 'Untagged' : l.status.replace('_', ' ')}
                       </span>
+                      
+                      {/* RECENTLY CHANGED: This button jumps straight back to the table and searches for the exact lead! */}
+                      <div className="mt-3 pt-2 border-t border-slate-100 flex justify-end">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onViewInDirectory(l); }} 
+                          className="text-[10px] font-bold text-primary flex items-center gap-0.5 hover:underline"
+                        >
+                          View in Directory <span className="material-symbols-outlined" style={{fontSize: '14px'}}>arrow_forward</span>
+                        </button>
+                      </div>
                     </div>
                   </Popup>
                 </CircleMarker>
