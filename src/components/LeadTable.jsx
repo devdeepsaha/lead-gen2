@@ -5,6 +5,14 @@ import LeadTableMobile from './LeadTableMobile';
 import LeadTablePagination from './LeadTablePagination';
 import { TEMPLATES } from '../data/templates';
 
+// RECENTLY CHANGED: Local time helper added here too
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function LeadTable({ 
   leads = [], isAdmin = false, setLeads, 
   dailyData, setDailyData, outreachLog = [], setOutreachLog,
@@ -18,7 +26,7 @@ export default function LeadTable({
   copyMode, setCopyMode,
   rangeFilters, setRangeFilters,
 
-  onLocate // RECENTLY CHANGED: Added prop to receive the map function
+  onLocate 
 }) {
   
   const [toastMsg, setToastMsg] = useState(null);
@@ -110,7 +118,8 @@ export default function LeadTable({
 
       setOutreachLog([newEntry, ...outreachLog]);
 
-      const today = new Date().toISOString().split('T')[0];
+      // RECENTLY CHANGED: Generates "today" string using local IST time instead of UTC to fix the rollover bug
+      const today = getLocalDateString();
       let newCounts = dailyData.date === today ? { ...dailyData.counts } : { job: 0, build_no_demo: 0, build_demo: 0 };
       if (newCounts[actualTplKey] !== undefined) newCounts[actualTplKey]++;
       setDailyData({ ...dailyData, date: today, counts: newCounts });
@@ -155,14 +164,14 @@ export default function LeadTable({
         isAdmin={isAdmin} copyMode={copyMode}
         handleStatusClick={handleStatusClick} handleCopyTemplate={handleCopyTemplate}
         handleEmailCopy={handleEmailCopy} updateLead={updateLead}
-        onLocate={onLocate} // RECENTLY CHANGED: Passed map handler down
+        onLocate={onLocate} 
       />
 
       <LeadTableMobile 
         paginatedLeads={paginatedLeads} isAdmin={isAdmin} copyMode={copyMode}
         handleStatusClick={handleStatusClick} handleCopyTemplate={handleCopyTemplate}
         handleEmailCopy={handleEmailCopy} updateLead={updateLead}
-        onLocate={onLocate} // RECENTLY CHANGED: Passed map handler down
+        onLocate={onLocate} 
       />
 
       <LeadTablePagination 

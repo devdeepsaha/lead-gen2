@@ -2,18 +2,21 @@ import React, { useMemo, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// RECENTLY CHANGED: The MapController now handles zooming AND automatically opening the popup!
+// RECENTLY CHANGED: Force Local Time helper
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 function MapController({ selectedLead, markerRefs }) {
   const map = useMap();
   useEffect(() => {
     if (selectedLead && selectedLead.lat && selectedLead.lng) {
-      // 1. Smoothly fly to the location
       map.flyTo([selectedLead.lat, selectedLead.lng], 16, { animate: true, duration: 1.5 });
-      
-      // 2. Open the popup associated with this specific lead
       const marker = markerRefs.current[selectedLead.id];
       if (marker) {
-        // Slight delay to allow the map to start moving before popping it open
         setTimeout(() => marker.openPopup(), 200);
       }
     }
@@ -26,15 +29,13 @@ export default function DashboardAnalytics({
   dailyData = { goal: 10, counts: { job: 0, build_no_demo: 0, build_demo: 0 } }, 
   dataSource = "cloud",
   selectedMapLead, 
-  onViewInDirectory, // RECENTLY CHANGED: Added new prop
+  onViewInDirectory,
   onOpenCalendar 
 }) {
   
-  // RECENTLY CHANGED: Refs to scroll the page and trigger popups programmatically
   const mapSectionRef = useRef(null);
   const markerRefs = useRef({});
 
-  // Auto-scroll the entire page down to the map when a lead is clicked from the table
   useEffect(() => {
     if (selectedMapLead && mapSectionRef.current) {
       mapSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -116,7 +117,8 @@ export default function DashboardAnalytics({
     });
   }, [stats]);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  // RECENTLY CHANGED: This now compares to your exact local date instead of UTC
+  const todayStr = getLocalDateString();
   const isToday = dailyData.date === todayStr;
 
   const todayJob = isToday ? (dailyData.counts.job || 0) : 0;
@@ -300,7 +302,6 @@ export default function DashboardAnalytics({
         </div>
       </div>
 
-      {/* RECENTLY CHANGED: Added ref here to allow auto-scrolling */}
       <div ref={mapSectionRef} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-4">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white z-10">
           <div>
@@ -330,7 +331,7 @@ export default function DashboardAnalytics({
                   key={l.id} 
                   center={[l.lat, l.lng]} 
                   radius={6}
-                  ref={(r) => { markerRefs.current[l.id] = r; }} // Maps the exact DOM element to this lead
+                  ref={(r) => { markerRefs.current[l.id] = r; }} 
                   pathOptions={{ 
                     color: getStatusColor(l.status), 
                     fillColor: getStatusColor(l.status), 
@@ -346,7 +347,6 @@ export default function DashboardAnalytics({
                         {l.status === 'none' ? 'Untagged' : l.status.replace('_', ' ')}
                       </span>
                       
-                      {/* RECENTLY CHANGED: This button jumps straight back to the table and searches for the exact lead! */}
                       <div className="mt-3 pt-2 border-t border-slate-100 flex justify-end">
                         <button 
                           onClick={(e) => { e.stopPropagation(); onViewInDirectory(l); }} 

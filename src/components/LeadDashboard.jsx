@@ -6,6 +6,13 @@ import SettingsPanel from './SettingsPanel';
 import OutreachCalendar from './OutreachCalendar';
 import FALLBACK_LEADS from '../data/fallback-leads';
 
+const getLocalDateString = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function LeadDashboard() {
   const [leads, setLeads] = useState([]);
   const [outreachLog, setOutreachLog] = useState([]);
@@ -34,7 +41,7 @@ export default function LeadDashboard() {
   });
 
   const [dailyData, setDailyData] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     goal: 10,
     counts: { job: 0, build_no_demo: 0, build_demo: 0 }
   });
@@ -102,10 +109,12 @@ export default function LeadDashboard() {
       let fetchedOutreach = [];
 
       try {
-        // RECENTLY CHANGED: Re-enabled fetching base leads from Vercel KV so changes persist
+        // RECENTLY CHANGED: Added Cache-Busting (?t=...) and strictly disabled Vercel's memory cache
+        // This forces the website to download the real, freshly cleaned database on every refresh
+        const timestamp = Date.now();
         const [lRes, sRes] = await Promise.all([
-          fetch('/api/leads').catch(() => null),
-          fetch('/api/statuses').catch(() => null)
+          fetch(`/api/leads?t=${timestamp}`, { cache: 'no-store' }).catch(() => null),
+          fetch(`/api/statuses?t=${timestamp}`, { cache: 'no-store' }).catch(() => null)
         ]);
 
         if (lRes?.ok) fetchedLeads = await lRes.json();
@@ -194,8 +203,9 @@ export default function LeadDashboard() {
     if (!deletedEntry) return;
 
     const updatedLog = outreachLog.filter(e => e.ts !== timestamp);
-    const today = new Date().toISOString().split('T')[0];
-    const entryDate = new Date(deletedEntry.ts).toISOString().split('T')[0];
+    
+    const today = getLocalDateString();
+    const entryDate = getLocalDateString(new Date(deletedEntry.ts));
     
     let updatedDaily = dailyData;
     if (entryDate === today) {
