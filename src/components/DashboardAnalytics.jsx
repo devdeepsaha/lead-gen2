@@ -94,15 +94,33 @@ export default function DashboardAnalytics({
   const dailyTotal = todayJob + todayBuild + todayBuildPlus;
   const dailyPct = Math.min(100, Math.round((dailyTotal / (dailyData.goal || 10)) * 100));
 
-  // RECENTLY CHANGED: Added sorting logic so tagged items are drawn LAST (on top of the grey ones)
+  // RECENTLY CHANGED: Smart Map Renderer that cross-references duplicate leads to salvage manual tags
   const mappableLeads = useMemo(() => {
+    // 1. Build a dictionary of every single status you've ever applied, keyed by the Business Name
+    const statusByName = {};
+    leads.forEach(l => {
+      if (l.status && l.status !== 'none' && l.name) {
+        statusByName[l.name.toLowerCase().trim()] = l.status;
+      }
+    });
+
+    // 2. Filter for the new leads that actually have map coordinates
     const validLeads = leads.filter(l => l.lat && l.lng && !isNaN(l.lat) && !isNaN(l.lng));
     
-    return validLeads.sort((a, b) => {
+    // 3. Inject your old tags into the new map dots!
+    return validLeads.map(l => {
+       const key = l.name ? l.name.toLowerCase().trim() : '';
+       return {
+           ...l,
+           // If it's untagged, but the dictionary found a tag under the same name, use it!
+           status: (l.status !== 'none') ? l.status : (statusByName[key] || 'none')
+       };
+    }).sort((a, b) => {
+      // 4. Sort them so the colored (tagged) dots are drawn ON TOP of the grey ones
       const getPriority = (status) => {
-        if (['job', 'build', 'build_plus'].includes(status)) return 2; // Highest priority (draw last / on top)
-        if (status === 'dismissed') return 1; // Medium priority
-        return 0; // Untagged (draw first / on bottom)
+        if (['job', 'build', 'build_plus'].includes(status)) return 2; 
+        if (status === 'dismissed') return 1; 
+        return 0; 
       };
       return getPriority(a.status) - getPriority(b.status);
     });
