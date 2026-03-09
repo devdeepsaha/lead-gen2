@@ -77,7 +77,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     return results.filter((r) => r.name);
   };
 
-  // RECENTLY CHANGED: Pushes CSV data directly to Vercel KV via API
   const handleFile = (file) => {
     if (!isAdmin) {
       setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
@@ -95,7 +94,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         const parsed = parseCSV(e.target.result);
         if (!parsed.length) throw new Error("No valid rows found in CSV");
         
-        setUploadStatus({ msg: `Parsed ${parsed.length} rows — uploading to Vercel KV...`, type: 'loading' });
+        setUploadStatus({ msg: `Parsed ${parsed.length} rows — staging data in memory...`, type: 'loading' });
         
         const existingMap = new Map(leads.map(l => [l.id, l]));
         let addedCount = 0;
@@ -120,25 +119,19 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         
         const newLeadsArray = Array.from(existingMap.values());
         
-        // 1. Update UI instantly
+        // 1. Update UI instantly with the massive payload
         setLeads(newLeadsArray); 
 
-        // 2. Push fully merged array directly to cloud
-        const res = await fetch('/api/leads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ auth: adminKey, leads: newLeadsArray })
-        });
-
-        if (!res.ok) throw new Error(`Server returned ${res.status}. Check API size limits or key.`);
-
+        // RECENTLY CHANGED: Removed the fetch API call from here completely! 
+        // We now just stage the massive data in the UI so the server doesn't crash on a 400 Bad Request.
+        
         setUploadStatus({ 
-          msg: `✅ Uploaded ${addedCount} new leads and updated ${updatedCount}. Saved directly to Vercel KV!`, 
+          msg: `✅ Loaded ${addedCount} new leads and updated ${updatedCount} in memory. Please click 'Smart Deduplicate' to clean and save to the cloud!`, 
           type: 'success' 
         });
         
       } catch (err) {
-        setUploadStatus({ msg: `❌ Cloud save failed: ${err.message}`, type: 'error' });
+        setUploadStatus({ msg: `❌ Upload failed: ${err.message}`, type: 'error' });
       }
     };
     reader.readAsText(file, "utf-8");
@@ -153,10 +146,10 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     handleFile(e.dataTransfer.files[0]);
   };
 
-  // RECENTLY CHANGED: Clean duplicates and automatically push fixed array to Vercel KV
+  // RECENTLY CHANGED: Smart Deduplicate now handles pushing to the cloud AFTER shrinking the payload size.
   const handleSmartCleanup = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to clean the database.");
-    if (!window.confirm("This will scan for duplicates, merge their contact info/tags, and delete the extra rows. Proceed?")) return;
+    if (!window.confirm("This will scan for duplicates, merge their contact info/tags, and push the cleaned database to Vercel. Proceed?")) return;
 
     setUploadStatus({ msg: "Cleaning duplicates and saving to cloud...", type: "loading" });
 
@@ -189,18 +182,18 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
 
     const cleanedLeads = Array.from(uniqueMap.values());
     
-    // Instantly update UI
+    // Instantly update UI with the cleaned data
     setLeads(cleanedLeads);
 
     try {
-      // Send directly to the cloud backend
+      // RECENTLY CHANGED: Push the smaller, cleaned array straight to the cloud as a raw array.
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ auth: adminKey, leads: cleanedLeads })
+        body: JSON.stringify(cleanedLeads) 
       });
 
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      if (!res.ok) throw new Error(`Server returned ${res.status}. The payload might still be too large for free tier.`);
 
       setUploadStatus({ 
         msg: `✅ Cleanup complete! Removed ${removedCount} duplicates and saved pristine data to Vercel KV cloud.`, 
@@ -263,7 +256,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
               <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
               <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich existing leads (like adding map coordinates) or add new ones. Your manual status tags are preserved.</p>
             </div>
-            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Cloud Upload</span>
+            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Staged Upload</span>
           </div>
           
           <div 
