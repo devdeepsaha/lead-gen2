@@ -84,11 +84,9 @@ export default function DashboardAnalytics({
     });
   }, [stats]);
 
-  // RECENTLY CHANGED: Midnight Rollover Check!
   const todayStr = new Date().toISOString().split('T')[0];
   const isToday = dailyData.date === todayStr;
 
-  // Only show numbers if they belong to today's date
   const todayJob = isToday ? (dailyData.counts.job || 0) : 0;
   const todayBuild = isToday ? (dailyData.counts.build_no_demo || 0) : 0;
   const todayBuildPlus = isToday ? (dailyData.counts.build_demo || 0) : 0;
@@ -96,8 +94,18 @@ export default function DashboardAnalytics({
   const dailyTotal = todayJob + todayBuild + todayBuildPlus;
   const dailyPct = Math.min(100, Math.round((dailyTotal / (dailyData.goal || 10)) * 100));
 
+  // RECENTLY CHANGED: Added sorting logic so tagged items are drawn LAST (on top of the grey ones)
   const mappableLeads = useMemo(() => {
-    return leads.filter(l => l.lat && l.lng && !isNaN(l.lat) && !isNaN(l.lng));
+    const validLeads = leads.filter(l => l.lat && l.lng && !isNaN(l.lat) && !isNaN(l.lng));
+    
+    return validLeads.sort((a, b) => {
+      const getPriority = (status) => {
+        if (['job', 'build', 'build_plus'].includes(status)) return 2; // Highest priority (draw last / on top)
+        if (status === 'dismissed') return 1; // Medium priority
+        return 0; // Untagged (draw first / on bottom)
+      };
+      return getPriority(a.status) - getPriority(b.status);
+    });
   }, [leads]);
 
   const getStatusColor = (status) => {
@@ -216,7 +224,6 @@ export default function DashboardAnalytics({
                 </div>
               </div>
               <div className="flex-1 space-y-2">
-                {/* RECENTLY CHANGED: Feeding the correct date variables into the progress bars */}
                 <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#10b981' }}></span>Job</span><span className="font-bold text-slate-700">{todayJob}</span></div>
                 <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#9855f6' }}></span>Build</span><span className="font-bold text-slate-700">{todayBuild}</span></div>
                 <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-bold text-slate-700">{todayBuildPlus}</span></div>
