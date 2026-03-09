@@ -17,14 +17,11 @@ export default function LeadTable({
   const [copyMode, setCopyMode] = useState('email'); 
   const [toastMsg, setToastMsg] = useState(null);
 
-  // Maximum value on the review slider
-  const MAX_REVIEWS_SLIDER = 5000;
-
   const [rangeFilters, setRangeFilters] = useState({
     ratingMin: 0,
     ratingMax: 5,
     reviewsMin: 0,
-    reviewsMax: MAX_REVIEWS_SLIDER
+    reviewsMax: 1000000
   });
 
   const showToast = (msg) => {
@@ -50,14 +47,11 @@ export default function LeadTable({
       // 2. Category Filter
       if (catFilter !== "all" && l.category !== catFilter) return false;
 
-      // 3. Range Filters (Rating & Reviews)
+      // 3. Range Filters
       const r = l.rating || 0;
       const rev = l.reviews || 0;
       if (r < rangeFilters.ratingMin || r > rangeFilters.ratingMax) return false;
-      
-      // Prevent filtering out mega-businesses if the slider is maxed out
-      if (rev < rangeFilters.reviewsMin) return false;
-      if (rangeFilters.reviewsMax < MAX_REVIEWS_SLIDER && rev > rangeFilters.reviewsMax) return false;
+      if (rev < rangeFilters.reviewsMin || rev > rangeFilters.reviewsMax) return false;
       
       // 4. Text Search Filter
       if (searchQuery) {
@@ -121,8 +115,14 @@ export default function LeadTable({
       setOutreachLog([newEntry, ...outreachLog]);
 
       const today = new Date().toISOString().split('T')[0];
-      const newCounts = { ...dailyData.counts };
+      
+      // RECENTLY CHANGED: This guarantees the first copy of the day resets the tracking counts
+      let newCounts = dailyData.date === today 
+        ? { ...dailyData.counts } 
+        : { job: 0, build_no_demo: 0, build_demo: 0 };
+        
       if (newCounts[actualTplKey] !== undefined) newCounts[actualTplKey]++;
+      
       setDailyData({ ...dailyData, date: today, counts: newCounts });
     };
 

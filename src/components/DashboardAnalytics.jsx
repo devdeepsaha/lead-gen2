@@ -84,8 +84,17 @@ export default function DashboardAnalytics({
     });
   }, [stats]);
 
-  const dailyTotal = (dailyData.counts.job || 0) + (dailyData.counts.build_no_demo || 0) + (dailyData.counts.build_demo || 0);
-  const dailyPct = Math.min(100, Math.round((dailyTotal / dailyData.goal) * 100));
+  // RECENTLY CHANGED: Midnight Rollover Check!
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isToday = dailyData.date === todayStr;
+
+  // Only show numbers if they belong to today's date
+  const todayJob = isToday ? (dailyData.counts.job || 0) : 0;
+  const todayBuild = isToday ? (dailyData.counts.build_no_demo || 0) : 0;
+  const todayBuildPlus = isToday ? (dailyData.counts.build_demo || 0) : 0;
+
+  const dailyTotal = todayJob + todayBuild + todayBuildPlus;
+  const dailyPct = Math.min(100, Math.round((dailyTotal / (dailyData.goal || 10)) * 100));
 
   const mappableLeads = useMemo(() => {
     return leads.filter(l => l.lat && l.lng && !isNaN(l.lat) && !isNaN(l.lng));
@@ -168,7 +177,6 @@ export default function DashboardAnalytics({
                     <path key={i} d={p.d} fill="none" stroke={p.color} strokeWidth={p.strokeWidth} strokeLinecap="butt" />
                 ))}
               </svg>
-              {/* RECENTLY CHANGED: Fixed justify-content to justifyContent to prevent the TS 1005 Error */}
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px', pointerEvents: 'none' }}>
                 <span style={{ fontSize: '22px', fontWeight: 900, color: '#1e293b', lineHeight: 1 }}>{stats.pct}%</span>
                 <span style={{ fontSize: '10px', fontWeight: 600, color: '#94a3b8' }}>Tagged</span>
@@ -208,9 +216,10 @@ export default function DashboardAnalytics({
                 </div>
               </div>
               <div className="flex-1 space-y-2">
-                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#10b981' }}></span>Job</span><span className="font-bold text-slate-700">{dailyData.counts.job || 0}</span></div>
-                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#9855f6' }}></span>Build</span><span className="font-bold text-slate-700">{dailyData.counts.build_no_demo || 0}</span></div>
-                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-bold text-slate-700">{dailyData.counts.build_demo || 0}</span></div>
+                {/* RECENTLY CHANGED: Feeding the correct date variables into the progress bars */}
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#10b981' }}></span>Job</span><span className="font-bold text-slate-700">{todayJob}</span></div>
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#9855f6' }}></span>Build</span><span className="font-bold text-slate-700">{todayBuild}</span></div>
+                <div className="flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 text-slate-600"><span className="w-2 h-2 rounded-full" style={{ background: '#3b82f6' }}></span>Build+</span><span className="font-bold text-slate-700">{todayBuildPlus}</span></div>
                 <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full bg-primary rounded-full transition-all" style={{ width: dailyPct + '%' }}></div>
                 </div>
