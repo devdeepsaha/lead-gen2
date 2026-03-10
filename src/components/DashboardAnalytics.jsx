@@ -30,7 +30,7 @@ export default function DashboardAnalytics({
   dataSource = "cloud",
   selectedMapLead, 
   onViewInDirectory,
-  onOpenCalendar 
+  onOpenCalendar // RECENTLY CHANGED: This is the function passed from LeadDashboard
 }) {
   
   const mapSectionRef = useRef(null);
@@ -117,7 +117,6 @@ export default function DashboardAnalytics({
     });
   }, [stats]);
 
-  // RECENTLY CHANGED: This now compares to your exact local date instead of UTC
   const todayStr = getLocalDateString();
   const isToday = dailyData.date === todayStr;
 
@@ -175,35 +174,35 @@ export default function DashboardAnalytics({
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Total</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide">Total</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black">{stats.total || '—'}</h3>
             <span className="text-emerald-500 text-[10px] font-bold bg-emerald-50 px-2 py-0.5 rounded-full">ALL</span>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Tagged</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide">Tagged</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black text-emerald-600">{stats.tagged}</h3>
             <span className="text-emerald-500 text-[10px] font-bold bg-emerald-50 px-2 py-0.5 rounded-full">{stats.pct}%</span>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Job Leads</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide">Job Leads</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black text-blue-600">{stats.job}</h3>
             <span className="text-blue-500 text-[10px] font-bold bg-blue-50 px-2 py-0.5 rounded-full">JOB</span>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Build</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide">Build</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black text-primary">{stats.free}</h3>
             <span className="text-primary text-[10px] font-bold bg-primary/10 px-2 py-0.5 rounded-full">BUILD</span>
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide lg:normal-case lg:tracking-normal">Replied</p>
+          <p className="text-slate-500 text-xs font-medium uppercase tracking-wide">Replied</p>
           <div className="flex items-end justify-between mt-1.5">
             <h3 className="text-2xl font-black text-emerald-600">{stats.replied}</h3>
             <span className="material-symbols-outlined fill-1 text-emerald-400" style={{ fontSize: '18px' }}>mark_email_read</span>
@@ -248,7 +247,11 @@ export default function DashboardAnalytics({
         </div>
 
         <div className="lg:col-span-2 flex flex-col gap-5 order-1 lg:order-2">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-primary/40 transition-all group" onClick={onOpenCalendar}>
+          {/* RECENTLY CHANGED: Added onClick trigger for the calendar modal */}
+          <div 
+            className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-primary/40 transition-all group" 
+            onClick={onOpenCalendar}
+          >
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-base font-bold group-hover:text-primary transition-colors">Today's Outreach</h3>
@@ -369,7 +372,6 @@ export default function DashboardAnalytics({
           )}
         </div>
       </div>
-      
     </div>
   );
 }
