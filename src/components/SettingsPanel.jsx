@@ -90,8 +90,8 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       address: idx(["Address", "address"]),
       rating: idx(["Rating", "rating"]),
       reviews: idx(["Reviews", "reviews", "review_count"]),
-      lat: idx(["Latitude", "lat", "latitude"]), // RECENTLY CHANGED: Robust coordinate header matching
-      lng: idx(["Longitude", "lng", "lon", "longitude"]), // RECENTLY CHANGED: Robust coordinate header matching
+      lat: idx(["Latitude", "lat", "latitude"]), 
+      lng: idx(["Longitude", "lng", "lon", "longitude"]), 
     };
     
     const results = [];
@@ -113,8 +113,8 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         address: g(col.address),
         rating: parseFloat(g(col.rating)) || null,
         reviews: parseInt(g(col.reviews)) || null,
-        lat: isNaN(latVal) ? null : latVal, // Ensure numeric lat
-        lng: isNaN(lngVal) ? null : lngVal, // Ensure numeric lng
+        lat: isNaN(latVal) ? null : latVal, 
+        lng: isNaN(lngVal) ? null : lngVal, 
         status: 'none',
         replied: false,
         checked: false
@@ -134,7 +134,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         parsed.forEach(p => {
           if (existingMap.has(p.id)) {
             const ex = existingMap.get(p.id);
-            // RECENTLY CHANGED: Fixed merge logic so CSV lat/lng overwrites nulls but keeps your tags
             existingMap.set(p.id, { 
               ...ex, 
               ...p, 
@@ -177,6 +176,14 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     } catch (err) { setUploadStatus({ msg: `❌ Cloud sync error.`, type: 'error' }); }
   };
 
+  // RECENTLY RESTORED: Daily Goal management functions
+  const saveDailyGoal = () => {
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode to change the daily goal.");
+    const val = Math.max(1, Math.min(200, goalInput));
+    setDailyData({ ...dailyData, goal: val });
+    alert(`🎯 Goal updated to ${val} per day.`);
+  };
+
   const resetAllStatuses = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode.");
     if (window.confirm("Reset ALL status tags?")) setLeads(leads.map(l => ({ ...l, status: 'none', replied: false })));
@@ -198,16 +205,17 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
           Settings {!isAdmin && <span className="material-symbols-outlined text-slate-300 text-xl">lock</span>}
         </h1>
-        <p className="text-sm text-slate-500">Manage leads data, sync, and backups.</p>
+        <p className="text-sm text-slate-500">Manage leads data, goals, and cloud backups.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl">
-        {/* CSV Upload - Restored Premium Dashed Border */}
+        
+        {/* CSV Upload Section with Restored Dashed UI */}
         <div className={`md:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm transition-all ${!isAdmin ? 'opacity-60' : ''}`}>
           <div className="flex items-start justify-between mb-3">
             <div>
               <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich leads. Manual status tags are preserved.</p>
+              <p className="text-xs text-slate-400 mt-0.5">Enrich leads with coordinates or metadata. Manual tags are kept.</p>
             </div>
             <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Premium Staged Upload</span>
           </div>
@@ -232,7 +240,26 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           )}
         </div>
 
-        {/* Sync & Backup */}
+        {/* RECENTLY RESTORED: Daily Goal & Outreach Settings */}
+        <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
+          <h3 className="font-bold text-sm mb-3">Target & Goals</h3>
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Daily Outreach Goal</label>
+              <div className="flex gap-2">
+                <input 
+                  type="number" 
+                  value={goalInput} 
+                  onChange={(e) => setGoalInput(e.target.value)}
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-primary/40"
+                />
+                <button onClick={saveDailyGoal} disabled={!isAdmin} className="bg-slate-900 text-white text-[11px] font-bold px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sync & Backup Management */}
         <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
           <h3 className="font-bold text-sm mb-1">Data Management</h3>
           <p className="text-xs text-slate-400 mb-4">Sync statuses to cloud or deduplicate database.</p>
@@ -250,34 +277,42 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           </div>
         </div>
 
-        {/* Dataset Info - Restored Color-Changing Progress Bar */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <h3 className="font-bold text-sm mb-3">Current Dataset</h3>
+        {/* RECENTLY RESTORED: Full Dataset Statistics */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm md:col-span-2 lg:col-span-1">
+          <h3 className="font-bold text-sm mb-3">Current Dataset Status</h3>
           <div className="space-y-3 text-xs text-slate-500">
-            <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
-            <div className="flex justify-between items-end mb-1">
-                <span>Vercel Payload Size</span>
-                <span className={`font-black ${stats.kb > 800 ? 'text-red-500' : stats.kb > 500 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                    {stats.sizeDisplay}
+            <div className="flex justify-between"><span>Total leads loaded</span><span className="font-bold text-slate-800">{stats.total}</span></div>
+            <div className="flex justify-between"><span>Manually Tagged</span><span className="font-bold text-emerald-600">{stats.tagged}</span></div>
+            <div className="flex justify-between"><span>Unique Categories</span><span className="font-bold text-slate-800">{stats.categories}</span></div>
+            
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex justify-between items-end mb-1.5">
+                <span className="font-semibold">Vercel KV Payload Size</span>
+                <span className={`font-black ${stats.kb > 800 ? 'text-red-500' : stats.kb > 500 ? 'text-amber-500' : 'text-primary'}`}>
+                  {stats.sizeDisplay}
                 </span>
+              </div>
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-500 ${stats.kb > 800 ? 'bg-red-500' : stats.kb > 500 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                  style={{ width: `${stats.percentOfLimit}%` }}
+                ></div>
+              </div>
+              <p className="text-[9px] text-slate-400 mt-1.5 text-right">Max serverless limit: ~1024 KB (1MB)</p>
             </div>
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div 
-                className={`h-full transition-all duration-500 ${stats.kb > 800 ? 'bg-red-500' : stats.kb > 500 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                style={{ width: `${stats.percentOfLimit}%` }}
-              ></div>
-            </div>
-            <p className="text-[9px] text-slate-400 mt-1 text-right">Server limit: 1MB</p>
           </div>
         </div>
 
         {/* Danger Zone */}
         <div className={`md:col-span-2 bg-white rounded-xl border border-red-100 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
-          <h3 className="font-bold text-sm mb-1 text-red-600">Danger Zone</h3>
-          <p className="text-xs text-slate-400 mb-3">Actions cannot be undone.</p>
-          <div className="flex gap-3">
-            <button onClick={resetAllStatuses} disabled={!isAdmin} className="flex-1 px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50">Reset tags</button>
-            <button onClick={resetLeadsData} disabled={!isAdmin} className="flex-1 px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50">Wipe cloud</button>
+          <h3 className="font-bold text-sm mb-1 text-red-600 font-black flex items-center gap-2">
+            <span className="material-symbols-outlined" style={{fontSize: '18px'}}>warning</span>
+            Danger Zone
+          </h3>
+          <p className="text-xs text-slate-400 mb-3">These actions affect all connected devices and cannot be reversed.</p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button onClick={resetAllStatuses} disabled={!isAdmin} className="flex-1 px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors">Reset all status tags</button>
+            <button onClick={resetLeadsData} disabled={!isAdmin} className="flex-1 px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors">Wipe leads from cloud</button>
           </div>
         </div>
       </div>
