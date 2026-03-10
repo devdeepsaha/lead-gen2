@@ -20,7 +20,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     return { total: leads.length, tagged, categories, sizeDisplay, percentOfLimit, kb };
   }, [leads]);
 
-  // RECENTLY CHANGED: Deep sync pushes BOTH the leads and the statuses
+  // RECENTLY CHANGED: Integrated Deep Sync to push leads + statuses simultaneously
   const handleDeepSync = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to sync.");
     setUploadStatus({ msg: "Pushing all data to Vercel KV...", type: "loading" });
@@ -39,14 +39,14 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     }
   };
 
-  // RECENTLY CHANGED: Restored the missing backup function
+  // RECENTLY CHANGED: Restored the missing backup function for statuses and reply state
   const downloadStatusBackup = () => {
-    if (!isAdmin) return alert("🔒 Unlock Admin Mode to download database backups.");
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode.");
     const map = {};
     leads.forEach((l) => { map[l.id] = { status: l.status, replied: l.replied }; });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(map, null, 2)], { type: "application/json" }));
-    a.download = "leadflow_backup.json";
+    a.download = "leadflow_statuses_backup.json";
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -107,7 +107,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
   };
 
   const handleFile = (file) => {
-    if (!isAdmin) return setUploadStatus({ msg: '🔒 Admin Mode required.', type: 'error' });
+    if (!isAdmin) return setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
@@ -120,92 +120,135 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           } else { existingMap.set(p.id, p); }
         });
         setLeads(Array.from(existingMap.values()));
-        setUploadStatus({ msg: `✅ CSV staged. Use 'Force Sync' or 'Smart Cleanup' to save.`, type: 'success' });
-      } catch (err) { setUploadStatus({ msg: `❌ Parse error.`, type: 'error' }); }
+        setUploadStatus({ msg: `✅ Loaded into memory. Use 'Force Cloud Sync' to save.`, type: 'success' });
+      } catch (err) { setUploadStatus({ msg: `❌ Upload failed.`, type: 'error' }); }
     };
     reader.readAsText(file, "utf-8");
   };
 
   const handleSmartCleanup = async () => {
-    if (!isAdmin) return alert("🔒 Admin Mode required.");
-    setUploadStatus({ msg: "Cleaning and saving...", type: "loading" });
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode.");
+    setUploadStatus({ msg: "Cleaning...", type: "loading" });
     const uniqueMap = new Map();
-    leads.forEach(l => {
-      const key = l.name.toLowerCase().trim();
+    leads.forEach(lead => {
+      const key = lead.name.toLowerCase().trim();
       if (uniqueMap.has(key)) {
-        const ex = uniqueMap.get(key);
-        uniqueMap.set(key, { ...ex, phone: ex.phone || l.phone, email: ex.email || l.email, lat: ex.lat || l.lat, lng: ex.lng || l.lng });
-      } else { uniqueMap.set(key, { ...l }); }
+        const existing = uniqueMap.get(key);
+        uniqueMap.set(key, { ...existing, phone: existing.phone || lead.phone, email: existing.email || lead.email });
+      } else { uniqueMap.set(key, { ...lead }); }
     });
-    const cleaned = Array.from(uniqueMap.values());
-    setLeads(cleaned);
+    const cleanedLeads = Array.from(uniqueMap.values());
+    setLeads(cleanedLeads);
     try {
-      await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cleaned) });
-      const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleaned, null, 2)};\n\nexport default FALLBACK_LEADS;`;
-      const blob = new Blob([fileContent], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'fallback-leads-cleaned.js'; a.click();
-      setUploadStatus({ msg: `✅ Cleaned! Local file downloaded.`, type: 'success' });
-    } catch (err) { setUploadStatus({ msg: `❌ Cloud error.`, type: 'error' }); }
+      await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cleanedLeads) });
+      const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleanedLeads, null, 2)};\n\nexport default FALLBACK_LEADS;`;
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([fileContent], { type: 'application/javascript' }));
+      a.download = 'fallback-leads-cleaned.js'; a.click();
+      setUploadStatus({ msg: `✅ Cleaned and Cloud updated!`, type: 'success' });
+    } catch (err) { setUploadStatus({ msg: `❌ Cloud sync error.`, type: 'error' }); }
   };
 
   const resetAllStatuses = () => {
-    if (!isAdmin) return alert("🔒 Admin Mode required.");
-    if (window.confirm("Reset all statuses?")) setLeads(leads.map(l => ({ ...l, status: 'none', replied: false })));
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode.");
+    if (window.confirm("Reset ALL status tags?")) setLeads(leads.map(l => ({ ...l, status: 'none', replied: false })));
   };
 
   const resetLeadsData = async () => {
-    if (!isAdmin) return alert("🔒 Admin Mode required.");
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode.");
     if (window.confirm("NUKE THE CLOUD?")) {
       try {
         await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([]) });
-        setUploadStatus({ msg: "✅ Cloud Wiped.", type: "success" });
-      } catch (e) { setUploadStatus({ msg: "❌ Wipe failed.", type: "error" }); }
+        setUploadStatus({ msg: "✅ Cloud Database Wiped!", type: "success" });
+      } catch (e) { setUploadStatus({ msg: `❌ Wipe failed.`, type: 'error' }); }
     }
   };
 
   return (
     <div id="view-settings" className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col pb-24 md:pb-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">Settings {!isAdmin && '🔒'}</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
+          Settings {!isAdmin && <span className="material-symbols-outlined text-slate-300 text-xl">lock</span>}
+        </h1>
+        <p className="text-sm text-slate-500">Manage leads data, sync, and backups.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl">
-        <div className="md:col-span-2 bg-white rounded-xl border p-5 shadow-sm">
-          <h3 className="font-bold text-sm mb-3">CSV Upload</h3>
-          <div className="border-2 dashed rounded-xl p-8 text-center cursor-pointer hover:bg-primary/5" onClick={() => isAdmin && document.getElementById('csv-file-input').click()} onDragOver={e=>{e.preventDefault();setIsDragging(true)}} onDragLeave={()=>setIsDragging(false)} onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0])}}>
-            <span className="material-symbols-outlined text-4xl text-slate-300">upload_file</span>
-            <p className="text-sm font-semibold text-slate-500 mt-2">Drop CSV or click to browse</p>
-            <input type="file" id="csv-file-input" accept=".csv" className="hidden" onChange={e=>handleFile(e.target.files[0])} disabled={!isAdmin} />
-          </div>
-          {uploadStatus.msg && <div className="mt-3 p-3 rounded-lg text-sm bg-slate-50 border">{uploadStatus.msg}</div>}
-        </div>
-
-        <div className="bg-white rounded-xl border p-5 shadow-sm">
-          <h3 className="font-bold text-sm mb-4">Data Management</h3>
-          <div className="flex flex-col gap-3">
-            <button onClick={handleDeepSync} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-primary/20 text-primary font-bold text-sm hover:bg-primary/5"><span className="material-symbols-outlined text-[16px]">sync</span> Force Cloud Sync</button>
-            <button onClick={downloadStatusBackup} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold"><span className="material-symbols-outlined text-[16px]">download</span> Download Backup JSON</button>
-            <button onClick={handleSmartCleanup} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 mt-2 rounded-lg bg-blue-500 text-white font-bold text-sm"><span className="material-symbols-outlined text-[16px]">cleaning_services</span> Smart Deduplicate</button>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border p-5 shadow-sm">
-          <h3 className="font-bold text-sm mb-3">Current Dataset</h3>
-          <div className="space-y-2 text-xs text-slate-500">
-            <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
-            <div className="flex justify-between"><span>Payload Size</span><span className="font-bold text-primary">{stats.sizeDisplay}</span></div>
-            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-2">
-              <div className="bg-primary h-full" style={{ width: `${stats.percentOfLimit}%` }}></div>
+        {/* CSV Upload - Restored Dotted/Dashed Border */}
+        <div className={`md:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm transition-all ${!isAdmin ? 'opacity-60' : ''}`}>
+          <div className="flex items-start justify-between mb-3">
+            <div>
+              <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich leads. Status tags are preserved.</p>
             </div>
+            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Premium Staged Upload</span>
+          </div>
+          
+          <div 
+            className={`border-2 rounded-xl p-8 text-center transition-all ${!isAdmin ? 'cursor-not-allowed bg-slate-50 border-slate-200' : isDragging ? 'border-primary bg-primary/5 cursor-pointer' : 'border-primary/30 hover:border-primary hover:bg-primary/5 cursor-pointer'}`}
+            style={{ borderStyle: 'dashed' }} // RESTORED DASHED LINES
+            onClick={() => isAdmin && document.getElementById('csv-file-input').click()}
+            onDragOver={e => { e.preventDefault(); if (isAdmin) setIsDragging(true); }}
+            onDragLeave={e => { e.preventDefault(); setIsDragging(false); }}
+            onDrop={e => { e.preventDefault(); setIsDragging(false); if (isAdmin) handleFile(e.dataTransfer.files[0]); }}
+          >
+            <span className="material-symbols-outlined block mb-2 text-primary/40" style={{ fontSize: '36px' }}>{isAdmin ? 'upload_file' : 'lock'}</span>
+            <p className="text-sm font-semibold text-slate-500">Drop CSV here or <span className="text-primary font-bold">click to browse</span></p>
+            <input type="file" id="csv-file-input" accept=".csv" className="hidden" onChange={(e) => handleFile(e.target.files[0])} disabled={!isAdmin} />
+          </div>
+          
+          {uploadStatus.msg && (
+            <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+              {uploadStatus.msg}
+            </div>
+          )}
+        </div>
+
+        {/* Sync & Backup */}
+        <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
+          <h3 className="font-bold text-sm mb-1">Data Management</h3>
+          <p className="text-xs text-slate-400 mb-4">Sync statuses to cloud or deduplicate database.</p>
+          
+          <div className="flex flex-col gap-3">
+            <button onClick={handleDeepSync} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-primary/20 text-primary font-bold text-sm hover:bg-primary/5">
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>sync</span> Force Cloud Sync
+            </button>
+            <button onClick={downloadStatusBackup} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold border-slate-200 text-slate-700 hover:bg-slate-50">
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span> Download Backup JSON
+            </button>
+            <button onClick={handleSmartCleanup} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 mt-2 rounded-lg bg-blue-500 text-white font-bold text-sm shadow-md shadow-blue-500/20">
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>cleaning_services</span> Smart Deduplicate
+            </button>
           </div>
         </div>
 
-        <div className="md:col-span-2 bg-white rounded-xl border border-red-100 p-5">
-          <h3 className="font-bold text-sm text-red-600 mb-3">Danger Zone</h3>
+        {/* Dataset Info - Restored Dynamic Color Bar */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <h3 className="font-bold text-sm mb-3">Current Dataset</h3>
+          <div className="space-y-3 text-xs text-slate-500">
+            <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
+            <div className="flex justify-between items-end mb-1">
+                <span>Vercel Payload Size</span>
+                <span className={`font-black ${stats.kb > 800 ? 'text-red-500' : stats.kb > 500 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                    {stats.sizeDisplay}
+                </span>
+            </div>
+            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+              <div 
+                className={`h-full transition-all duration-500 ${stats.kb > 800 ? 'bg-red-500' : stats.kb > 500 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
+                style={{ width: `${stats.percentOfLimit}%` }}
+              ></div>
+            </div>
+            <p className="text-[9px] text-slate-400 mt-1 text-right">Server limit: 1MB</p>
+          </div>
+        </div>
+
+        {/* Danger Zone */}
+        <div className={`md:col-span-2 bg-white rounded-xl border border-red-100 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
+          <h3 className="font-bold text-sm mb-1 text-red-600">Danger Zone</h3>
+          <p className="text-xs text-slate-400 mb-3">Actions cannot be undone.</p>
           <div className="flex gap-3">
-            <button onClick={resetAllStatuses} className="px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm">Reset tags</button>
-            <button onClick={resetLeadsData} className="px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm">Wipe cloud</button>
+            <button onClick={resetAllStatuses} disabled={!isAdmin} className="flex-1 px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50">Reset tags</button>
+            <button onClick={resetLeadsData} disabled={!isAdmin} className="flex-1 px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50">Wipe cloud</button>
           </div>
         </div>
       </div>
