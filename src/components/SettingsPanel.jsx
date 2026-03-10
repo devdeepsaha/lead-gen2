@@ -20,7 +20,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     return { total: leads.length, tagged, categories, sizeDisplay, percentOfLimit, kb };
   }, [leads]);
 
-  // RECENTLY CHANGED: Integrated Deep Sync to push leads + statuses simultaneously
+  // RECENTLY CHANGED: This function pushes both Base leads (with coordinates) and statuses
   const handleDeepSync = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to sync.");
     setUploadStatus({ msg: "Pushing all data to Vercel KV...", type: "loading" });
@@ -31,7 +31,10 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         body: JSON.stringify(leads)
       });
       if (!resLeads.ok) throw new Error("Failed to sync base leads.");
+      
+      // Trigger the status/daily data sync
       await onForceSync();
+      
       setUploadStatus({ msg: "✅ Deep Cloud Sync Complete!", type: "success" });
       setTimeout(() => setUploadStatus({ msg: '', type: '' }), 4000);
     } catch (err) {
@@ -39,7 +42,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     }
   };
 
-  // RECENTLY CHANGED: Restored the missing backup function for statuses and reply state
   const downloadStatusBackup = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode.");
     const map = {};
@@ -68,14 +70,16 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     text = text.replace(/^\uFEFF/, "");
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
     if (lines.length < 2) return [];
-    const headers = parseCSVRow(lines[0]).map((h) => h.trim());
+    const headers = parseCSVRow(lines[0]).map((h) => h.trim().toLowerCase());
+    
     const idx = (names) => {
       for (const n of names) {
-        const i = headers.findIndex((h) => h.toLowerCase() === n.toLowerCase());
+        const i = headers.findIndex((h) => h === n.toLowerCase());
         if (i >= 0) return i;
       }
       return -1;
     };
+    
     const col = {
       id: idx(["Place ID", "id", "place_id"]),
       name: idx(["Business Name", "name", "business_name"]),
@@ -86,21 +90,34 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       address: idx(["Address", "address"]),
       rating: idx(["Rating", "rating"]),
       reviews: idx(["Reviews", "reviews", "review_count"]),
-      lat: idx(["Latitude", "lat", "latitude"]),
-      lng: idx(["Longitude", "lng", "lon", "longitude"]),
+      lat: idx(["Latitude", "lat", "latitude"]), // RECENTLY CHANGED: Robust coordinate header matching
+      lng: idx(["Longitude", "lng", "lon", "longitude"]), // RECENTLY CHANGED: Robust coordinate header matching
     };
+    
     const results = [];
     for (let i = 1; i < lines.length; i++) {
       const row = parseCSVRow(lines[i]);
       if (row.length < 3) continue;
       const g = (c) => (c >= 0 ? (row[c] || "").trim() : "");
+      
+      const latVal = parseFloat(g(col.lat));
+      const lngVal = parseFloat(g(col.lng));
+
       results.push({
         id: g(col.id) || `csv_${i}_${Date.now()}`,
-        name: g(col.name), phone: g(col.phone), website: g(col.website), email: g(col.email),
-        category: g(col.category) || "Uncategorized", address: g(col.address),
-        rating: parseFloat(g(col.rating)) || null, reviews: parseInt(g(col.reviews)) || null,
-        lat: parseFloat(g(col.lat)) || null, lng: parseFloat(g(col.lng)) || null,
-        status: 'none', replied: false, checked: false
+        name: g(col.name),
+        phone: g(col.phone),
+        website: g(col.website),
+        email: g(col.email),
+        category: g(col.category) || "Uncategorized",
+        address: g(col.address),
+        rating: parseFloat(g(col.rating)) || null,
+        reviews: parseInt(g(col.reviews)) || null,
+        lat: isNaN(latVal) ? null : latVal, // Ensure numeric lat
+        lng: isNaN(lngVal) ? null : lngVal, // Ensure numeric lng
+        status: 'none',
+        replied: false,
+        checked: false
       });
     }
     return results.filter((r) => r.name);
@@ -113,14 +130,26 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       try {
         const parsed = parseCSV(e.target.result);
         const existingMap = new Map(leads.map(l => [l.id, l]));
+        
         parsed.forEach(p => {
           if (existingMap.has(p.id)) {
             const ex = existingMap.get(p.id);
-            existingMap.set(p.id, { ...ex, ...p, status: ex.status, replied: ex.replied });
-          } else { existingMap.set(p.id, p); }
+            // RECENTLY CHANGED: Fixed merge logic so CSV lat/lng overwrites nulls but keeps your tags
+            existingMap.set(p.id, { 
+              ...ex, 
+              ...p, 
+              lat: p.lat || ex.lat, 
+              lng: p.lng || ex.lng,
+              status: ex.status, 
+              replied: ex.replied 
+            });
+          } else { 
+            existingMap.set(p.id, p); 
+          }
         });
+        
         setLeads(Array.from(existingMap.values()));
-        setUploadStatus({ msg: `✅ Loaded into memory. Use 'Force Cloud Sync' to save.`, type: 'success' });
+        setUploadStatus({ msg: `✅ Leads staged with coordinates. Use 'Force Cloud Sync' to save!`, type: 'success' });
       } catch (err) { setUploadStatus({ msg: `❌ Upload failed.`, type: 'error' }); }
     };
     reader.readAsText(file, "utf-8");
@@ -134,7 +163,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       const key = lead.name.toLowerCase().trim();
       if (uniqueMap.has(key)) {
         const existing = uniqueMap.get(key);
-        uniqueMap.set(key, { ...existing, phone: existing.phone || lead.phone, email: existing.email || lead.email });
+        uniqueMap.set(key, { ...existing, phone: existing.phone || lead.phone, email: existing.email || lead.email, lat: existing.lat || lead.lat, lng: existing.lng || lead.lng });
       } else { uniqueMap.set(key, { ...lead }); }
     });
     const cleanedLeads = Array.from(uniqueMap.values());
@@ -173,19 +202,19 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl">
-        {/* CSV Upload - Restored Dotted/Dashed Border */}
+        {/* CSV Upload - Restored Premium Dashed Border */}
         <div className={`md:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm transition-all ${!isAdmin ? 'opacity-60' : ''}`}>
           <div className="flex items-start justify-between mb-3">
             <div>
               <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich leads. Status tags are preserved.</p>
+              <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich leads. Manual status tags are preserved.</p>
             </div>
             <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Premium Staged Upload</span>
           </div>
           
           <div 
             className={`border-2 rounded-xl p-8 text-center transition-all ${!isAdmin ? 'cursor-not-allowed bg-slate-50 border-slate-200' : isDragging ? 'border-primary bg-primary/5 cursor-pointer' : 'border-primary/30 hover:border-primary hover:bg-primary/5 cursor-pointer'}`}
-            style={{ borderStyle: 'dashed' }} // RESTORED DASHED LINES
+            style={{ borderStyle: 'dashed' }}
             onClick={() => isAdmin && document.getElementById('csv-file-input').click()}
             onDragOver={e => { e.preventDefault(); if (isAdmin) setIsDragging(true); }}
             onDragLeave={e => { e.preventDefault(); setIsDragging(false); }}
@@ -221,7 +250,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           </div>
         </div>
 
-        {/* Dataset Info - Restored Dynamic Color Bar */}
+        {/* Dataset Info - Restored Color-Changing Progress Bar */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
           <h3 className="font-bold text-sm mb-3">Current Dataset</h3>
           <div className="space-y-3 text-xs text-slate-500">
