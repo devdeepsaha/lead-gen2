@@ -20,8 +20,11 @@ export default function LeadDashboard() {
   const [syncStatus, setSyncStatus] = useState('synced');
   const [isCalOpen, setIsCalOpen] = useState(false);
   const [dataSource, setDataSource] = useState("Loading...");
+  
+  // RECENTLY CHANGED: isAdmin now strictly depends on the server's verification
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminKey, setAdminKey] = useState("");
+
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,6 +46,43 @@ export default function LeadDashboard() {
 
   const [selectedMapLead, setSelectedMapLead] = useState(null);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
+  // RECENTLY CHANGED: New function to strictly verify the Admin Key with the server
+  const handleToggleAdmin = async () => {
+    if (isAdmin) {
+      setIsAdmin(false);
+      setAdminKey("");
+      return;
+    }
+
+    const input = prompt("Enter Admin Security Key:");
+    if (!input) return;
+
+    try {
+      // We test the key by trying to fetch a protected small piece of data
+      const res = await fetch(`/api/statuses?auth=${encodeURIComponent(input)}`, { cache: 'no-store' });
+      
+      if (res.ok) {
+        setAdminKey(input);
+        setIsAdmin(true);
+        // Optional: Save to sessionStorage so it persists refresh but not closing tab
+        sessionStorage.setItem('admin_session_key', input);
+      } else {
+        alert("❌ Invalid Security Key. Access Denied.");
+      }
+    } catch (err) {
+      alert("⚠️ Connection error during authentication.");
+    }
+  };
+
+  // RECENTLY CHANGED: Auto-resume session on refresh if key was saved
+  useEffect(() => {
+    const savedKey = sessionStorage.getItem('admin_session_key');
+    if (savedKey) {
+      fetch(`/api/statuses?auth=${encodeURIComponent(savedKey)}`)
+        .then(res => { if(res.ok) { setAdminKey(savedKey); setIsAdmin(true); } });
+    }
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -133,7 +173,13 @@ export default function LeadDashboard() {
           history: { [(updatedDaily || dailyData).date]: (updatedDaily || dailyData).counts }
         }),
       });
-      if (res.status === 401) { setSyncStatus('error'); setIsAdmin(false); setAdminKey(""); return; }
+      if (res.status === 401) { 
+        setSyncStatus('error'); 
+        setIsAdmin(false); 
+        setAdminKey(""); 
+        sessionStorage.removeItem('admin_session_key');
+        return; 
+      }
       if (!res.ok) throw new Error("Server error " + res.status);
       setSyncStatus('synced');
     } catch (e) { console.error("Sync failed", e); setSyncStatus('error'); }
@@ -224,7 +270,15 @@ export default function LeadDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-2 lg:gap-4">
-          <button onClick={() => { if(isAdmin){setIsAdmin(false);setAdminKey("");}else{const p=prompt("Admin Key:");if(p){setAdminKey(p);setIsAdmin(true);}} }} className={`w-8 h-8 lg:w-9 lg:h-9 rounded-lg flex items-center justify-center transition-all ${isAdmin ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`} title={isAdmin ? "Lock Admin Mode" : "Unlock Admin Mode"}><span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{isAdmin ? 'lock_open' : 'lock'}</span></button>
+          {/* RECENTLY CHANGED: Button now triggers handleToggleAdmin for real verification */}
+          <button 
+            onClick={handleToggleAdmin} 
+            className={`w-8 h-8 lg:w-9 lg:h-9 rounded-lg flex items-center justify-center transition-all ${isAdmin ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`} 
+            title={isAdmin ? "Lock Admin Mode" : "Unlock Admin Mode"}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>{isAdmin ? 'lock_open' : 'lock'}</span>
+          </button>
+          
           <button onClick={() => setShowShortcutsHelp(true)} className="w-8 h-8 lg:w-9 lg:h-9 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 flex items-center justify-center transition-all" title="Shortcuts (?)"><span className="material-symbols-outlined" style={{ fontSize: '18px' }}>help</span></button>
           <div className="flex items-center gap-1.5 lg:gap-2 text-[10px] lg:text-xs text-slate-500"><span className={`sync-dot w-2 h-2 rounded-full inline-block ${syncStatus === 'synced' ? 'bg-emerald-500' : syncStatus === 'error' ? 'bg-red-500' : 'bg-amber-500 animate-pulse'}`} /><span className="hidden sm:inline font-medium">{syncStatus === 'synced' ? 'Synced' : syncStatus === 'error' ? 'Sync Error' : 'Saving...'}</span></div>
           <button onClick={handleExportMarked} className="flex h-8 lg:h-10 items-center gap-1 lg:gap-2 rounded-lg bg-primary px-3 lg:px-4 text-[11px] lg:text-sm font-bold text-white shadow-md shadow-primary/25 hover:bg-primary/90 active:scale-95 transition-all ml-1 lg:ml-0"><span className="material-symbols-outlined" style={{ fontSize: '15px' }}>ios_share</span><span className="hidden sm:inline">Export</span></button>
@@ -237,7 +291,6 @@ export default function LeadDashboard() {
           <nav className="flex flex-col gap-2 px-3 mt-2">{NavItems.map(item => (<a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveView(item.id); }} className={`flex items-center rounded-xl transition-all duration-200 ${sidebarCollapsed ? 'justify-center h-12 w-12 mx-auto' : 'px-4 py-3 gap-3'} ${activeView === item.id ? 'bg-primary text-white shadow-md shadow-primary/20' : 'text-slate-500 hover:bg-primary/5'}`}><span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: '22px' }}>{item.icon}</span>{!sidebarCollapsed && <span className="font-bold text-sm tracking-tight">{item.label}</span>}</a>))}</nav>
         </aside>
 
-        {/* RECENTLY CHANGED: pb-20 on mobile main so content doesn't get stuck behind the fixed nav */}
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 lg:pb-0 w-full relative">
           {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} selectedMapLead={selectedMapLead} dataSource={dataSource} onViewInDirectory={handleViewInDirectory} onOpenCalendar={() => setIsCalOpen(true)} />}
           {activeView === 'leads' && ( <LeadTable leads={leads} isAdmin={isAdmin} setLeads={handleUpdateLeads} dailyData={dailyData} setDailyData={handleUpdateDaily} outreachLog={outreachLog} setOutreachLog={handleUpdateOutreach} searchQuery={searchQuery} setSearchQuery={setSearchQuery} statusFilter={statusFilter} setStatusFilter={setStatusFilter} catFilter={catFilter} setCatFilter={setCatFilter} sortType={sortType} setSortType={setSortType} page={page} setPage={setPage} perPage={perPage} setPerPage={setPerPage} copyMode={copyMode} setCopyMode={setCopyMode} rangeFilters={rangeFilters} setRangeFilters={setRangeFilters} onLocate={handleLocateOnMap} /> )}
@@ -245,7 +298,6 @@ export default function LeadDashboard() {
           {activeView === 'settings' && <SettingsPanel leads={leads} isAdmin={isAdmin} adminKey={adminKey} setLeads={handleUpdateLeads} dailyData={dailyData} setDailyData={handleUpdateDaily} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData, outreachLog, adminKey)} />}
         </main>
 
-        {/* RECENTLY CHANGED: Forced navigation to stay fixed at the absolute bottom of the screen */}
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-primary/10 bg-white px-4 pb-safe pt-2 z-[60] shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
           <div className="flex justify-around items-center max-w-lg mx-auto pb-1">
             {NavItems.map(item => (
