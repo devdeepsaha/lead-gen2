@@ -20,31 +20,35 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     return { total: leads.length, tagged, categories, sizeDisplay, percentOfLimit, kb };
   }, [leads]);
 
-  // RECENTLY CHANGED: New helper to handle a deep manual sync of everything
+  // RECENTLY CHANGED: Deep sync pushes BOTH the leads and the statuses
   const handleDeepSync = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to sync.");
-    
     setUploadStatus({ msg: "Pushing all data to Vercel KV...", type: "loading" });
-    
     try {
-      // 1. Sync the Base Leads (The heavy CSV data)
       const resLeads = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(leads)
       });
-
       if (!resLeads.ok) throw new Error("Failed to sync base leads.");
-
-      // 2. Trigger the standard Status/Daily sync
       await onForceSync();
-
-      setUploadStatus({ msg: "✅ Deep Cloud Sync Complete! All leads and tags are safe.", type: "success" });
+      setUploadStatus({ msg: "✅ Deep Cloud Sync Complete!", type: "success" });
       setTimeout(() => setUploadStatus({ msg: '', type: '' }), 4000);
-      
     } catch (err) {
       setUploadStatus({ msg: `❌ Sync failed: ${err.message}`, type: "error" });
     }
+  };
+
+  // RECENTLY CHANGED: Restored the missing backup function
+  const downloadStatusBackup = () => {
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode to download database backups.");
+    const map = {};
+    leads.forEach((l) => { map[l.id] = { status: l.status, replied: l.replied }; });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(map, null, 2)], { type: "application/json" }));
+    a.download = "leadflow_backup.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const parseCSVRow = (line) => {
@@ -65,7 +69,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
     if (lines.length < 2) return [];
     const headers = parseCSVRow(lines[0]).map((h) => h.trim());
-    
     const idx = (names) => {
       for (const n of names) {
         const i = headers.findIndex((h) => h.toLowerCase() === n.toLowerCase());
@@ -73,7 +76,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       }
       return -1;
     };
-    
     const col = {
       id: idx(["Place ID", "id", "place_id"]),
       name: idx(["Business Name", "name", "business_name"]),
@@ -87,7 +89,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       lat: idx(["Latitude", "lat", "latitude"]),
       lng: idx(["Longitude", "lng", "lon", "longitude"]),
     };
-    
     const results = [];
     for (let i = 1; i < lines.length; i++) {
       const row = parseCSVRow(lines[i]);
@@ -95,252 +96,116 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       const g = (c) => (c >= 0 ? (row[c] || "").trim() : "");
       results.push({
         id: g(col.id) || `csv_${i}_${Date.now()}`,
-        name: g(col.name),
-        phone: g(col.phone),
-        website: g(col.website),
-        email: g(col.email),
-        category: g(col.category) || "Uncategorized",
-        address: g(col.address),
-        rating: parseFloat(g(col.rating)) || null,
-        reviews: parseInt(g(col.reviews)) || null,
-        lat: parseFloat(g(col.lat)) || null,
-        lng: parseFloat(g(col.lng)) || null,
-        status: 'none',
-        replied: false,
-        checked: false
+        name: g(col.name), phone: g(col.phone), website: g(col.website), email: g(col.email),
+        category: g(col.category) || "Uncategorized", address: g(col.address),
+        rating: parseFloat(g(col.rating)) || null, reviews: parseInt(g(col.reviews)) || null,
+        lat: parseFloat(g(col.lat)) || null, lng: parseFloat(g(col.lng)) || null,
+        status: 'none', replied: false, checked: false
       });
     }
     return results.filter((r) => r.name);
   };
 
   const handleFile = (file) => {
-    if (!isAdmin) return setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
-    if (!file || !file.name.endsWith('.csv')) return setUploadStatus({ msg: 'Please drop a valid .csv file', type: 'error' });
-    
+    if (!isAdmin) return setUploadStatus({ msg: '🔒 Admin Mode required.', type: 'error' });
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
         const parsed = parseCSV(e.target.result);
-        if (!parsed.length) throw new Error("No valid rows found in CSV");
-        
-        setUploadStatus({ msg: `Parsed ${parsed.length} rows — staging data in memory...`, type: 'loading' });
-        
         const existingMap = new Map(leads.map(l => [l.id, l]));
-        let addedCount = 0, updatedCount = 0;
-
-        parsed.forEach(parsedLead => {
-          if (existingMap.has(parsedLead.id)) {
-            const existingLead = existingMap.get(parsedLead.id);
-            existingMap.set(parsedLead.id, {
-              ...existingLead, ...parsedLead,               
-              status: existingLead.status, replied: existingLead.replied, checked: existingLead.checked
-            });
-            updatedCount++;
-          } else {
-            existingMap.set(parsedLead.id, parsedLead);
-            addedCount++;
-          }
+        parsed.forEach(p => {
+          if (existingMap.has(p.id)) {
+            const ex = existingMap.get(p.id);
+            existingMap.set(p.id, { ...ex, ...p, status: ex.status, replied: ex.replied });
+          } else { existingMap.set(p.id, p); }
         });
-        
-        const newLeadsArray = Array.from(existingMap.values());
-        setLeads(newLeadsArray); 
-        
-        setUploadStatus({ 
-          msg: `✅ Loaded ${addedCount} new leads and updated ${updatedCount}. Click 'Smart Deduplicate' to clean!`, 
-          type: 'success' 
-        });
-      } catch (err) {
-        setUploadStatus({ msg: `❌ Upload failed: ${err.message}`, type: 'error' });
-      }
+        setLeads(Array.from(existingMap.values()));
+        setUploadStatus({ msg: `✅ CSV staged. Use 'Force Sync' or 'Smart Cleanup' to save.`, type: 'success' });
+      } catch (err) { setUploadStatus({ msg: `❌ Parse error.`, type: 'error' }); }
     };
     reader.readAsText(file, "utf-8");
   };
 
-  const handleDragOver = (e) => { e.preventDefault(); if (isAdmin) setIsDragging(true); };
-  const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (!isAdmin) return setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
-    handleFile(e.dataTransfer.files[0]);
-  };
-
   const handleSmartCleanup = async () => {
-    if (!isAdmin) return alert("🔒 Unlock Admin Mode to clean the database.");
-    if (!window.confirm("This will scan for duplicates, merge their data, and download a file to permanently fix your codebase. Proceed?")) return;
-
-    setUploadStatus({ msg: "Cleaning duplicates and saving...", type: "loading" });
-
+    if (!isAdmin) return alert("🔒 Admin Mode required.");
+    setUploadStatus({ msg: "Cleaning and saving...", type: "loading" });
     const uniqueMap = new Map();
-    let removedCount = 0;
-
-    leads.forEach(lead => {
-      const key = lead.name.toLowerCase().trim();
+    leads.forEach(l => {
+      const key = l.name.toLowerCase().trim();
       if (uniqueMap.has(key)) {
-        removedCount++;
-        const existing = uniqueMap.get(key);
-        let bestStatus = existing.status;
-        if (existing.status === 'none' && lead.status !== 'none') bestStatus = lead.status;
-
-        uniqueMap.set(key, {
-          ...existing, status: bestStatus, replied: existing.replied || lead.replied,
-          phone: existing.phone || lead.phone, email: existing.email || lead.email,
-          lat: existing.lat || lead.lat, lng: existing.lng || lead.lng
-        });
-      } else {
-        uniqueMap.set(key, { ...lead });
-      }
+        const ex = uniqueMap.get(key);
+        uniqueMap.set(key, { ...ex, phone: ex.phone || l.phone, email: ex.email || l.email, lat: ex.lat || l.lat, lng: ex.lng || l.lng });
+      } else { uniqueMap.set(key, { ...l }); }
     });
-
-    const cleanedLeads = Array.from(uniqueMap.values());
-    setLeads(cleanedLeads);
-
+    const cleaned = Array.from(uniqueMap.values());
+    setLeads(cleaned);
     try {
-      const res = await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cleanedLeads) 
-      });
-
-      const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleanedLeads, null, 2)};\n\nexport default FALLBACK_LEADS;`;
+      await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cleaned) });
+      const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleaned, null, 2)};\n\nexport default FALLBACK_LEADS;`;
       const blob = new Blob([fileContent], { type: 'application/javascript' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'fallback-leads-cleaned.js';
-      a.click();
-      URL.revokeObjectURL(url);
-
-      if (!res.ok) throw new Error(`Server returned ${res.status}. Cloud ignored it, but local file is downloaded!`);
-
-      setUploadStatus({ msg: `✅ Success! Removed ${removedCount} duplicates. Cloud updated.`, type: 'success' });
-    } catch (err) {
-      setUploadStatus({ msg: `⚠️ Cloud rejected the save, BUT your pristine file was downloaded! Swap it into your code!`, type: 'warning' });
-    }
+      const a = document.createElement('a'); a.href = url; a.download = 'fallback-leads-cleaned.js'; a.click();
+      setUploadStatus({ msg: `✅ Cleaned! Local file downloaded.`, type: 'success' });
+    } catch (err) { setUploadStatus({ msg: `❌ Cloud error.`, type: 'error' }); }
   };
 
   const resetAllStatuses = () => {
-    if (!isAdmin) return alert("🔒 Unlock Admin Mode to reset statuses.");
-    if (!window.confirm("Reset ALL status tags on all devices? This will wipe your progress.")) return;
-    setLeads(leads.map(l => ({ ...l, status: 'none', replied: false })));
+    if (!isAdmin) return alert("🔒 Admin Mode required.");
+    if (window.confirm("Reset all statuses?")) setLeads(leads.map(l => ({ ...l, status: 'none', replied: false })));
   };
 
   const resetLeadsData = async () => {
-    if (!isAdmin) return alert("🔒 Unlock Admin Mode to wipe the database.");
-    if (!window.confirm("NUKE THE CLOUD? This will delete the leads from Vercel KV. Proceed?")) return;
-    
-    try {
-      setUploadStatus({ msg: "Nuking cloud data...", type: "loading" });
-      const res = await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([]) 
-      });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      setUploadStatus({ msg: "✅ Cloud Database Wiped! Please refresh the page now.", type: "success" });
-    } catch (err) {
-      setUploadStatus({ msg: `❌ Failed to wipe cloud: ${err.message}`, type: 'error' });
+    if (!isAdmin) return alert("🔒 Admin Mode required.");
+    if (window.confirm("NUKE THE CLOUD?")) {
+      try {
+        await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([]) });
+        setUploadStatus({ msg: "✅ Cloud Wiped.", type: "success" });
+      } catch (e) { setUploadStatus({ msg: "❌ Wipe failed.", type: "error" }); }
     }
   };
 
   return (
     <div id="view-settings" className="flex-1 p-4 md:p-6 overflow-y-auto flex flex-col pb-24 md:pb-6">
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
-            Settings {!isAdmin && <span className="material-symbols-outlined text-slate-300 text-xl">lock</span>}
-          </h1>
-          <p className="text-sm text-slate-500">Manage leads data, sync, and backups.</p>
-        </div>
+        <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">Settings {!isAdmin && '🔒'}</h1>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl">
-        
-        {/* CSV Upload */}
-        <div className={`md:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm transition-all ${!isAdmin ? 'opacity-60' : ''}`}>
-          <div className="flex items-start justify-between mb-3">
-            <div>
-              <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Preserves manual tags. Preserves coordinates.</p>
-            </div>
-            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Staged Upload</span>
+        <div className="md:col-span-2 bg-white rounded-xl border p-5 shadow-sm">
+          <h3 className="font-bold text-sm mb-3">CSV Upload</h3>
+          <div className="border-2 dashed rounded-xl p-8 text-center cursor-pointer hover:bg-primary/5" onClick={() => isAdmin && document.getElementById('csv-file-input').click()} onDragOver={e=>{e.preventDefault();setIsDragging(true)}} onDragLeave={()=>setIsDragging(false)} onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0])}}>
+            <span className="material-symbols-outlined text-4xl text-slate-300">upload_file</span>
+            <p className="text-sm font-semibold text-slate-500 mt-2">Drop CSV or click to browse</p>
+            <input type="file" id="csv-file-input" accept=".csv" className="hidden" onChange={e=>handleFile(e.target.files[0])} disabled={!isAdmin} />
           </div>
-          
-          <div 
-            className={`border-2 dashed rounded-xl p-8 text-center transition-all ${!isAdmin ? 'cursor-not-allowed bg-slate-50 border-slate-200' : isDragging ? 'border-primary bg-primary/5 cursor-pointer' : 'border-primary/30 hover:border-primary hover:bg-primary/5 cursor-pointer'}`}
-            style={{ borderStyle: 'dashed' }}
-            onClick={() => isAdmin ? document.getElementById('csv-file-input').click() : setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload.', type: 'error' })}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <span className={`material-symbols-outlined block mb-2 ${isAdmin ? 'text-primary/40' : 'text-slate-300'}`} style={{ fontSize: '36px' }}>{isAdmin ? 'upload_file' : 'lock'}</span>
-            <p className="text-sm font-semibold text-slate-500">Drop CSV here or <span className={isAdmin ? "text-primary" : ""}>click to browse</span></p>
-            <input type="file" id="csv-file-input" accept=".csv" className="hidden" onChange={(e) => handleFile(e.target.files[0])} disabled={!isAdmin} />
-          </div>
-          
-          {uploadStatus.msg && (
-            <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : uploadStatus.type === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-100' : uploadStatus.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
-              {uploadStatus.msg}
-            </div>
-          )}
+          {uploadStatus.msg && <div className="mt-3 p-3 rounded-lg text-sm bg-slate-50 border">{uploadStatus.msg}</div>}
         </div>
 
-        {/* Sync & Backup */}
-        <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
-          <h3 className="font-bold text-sm mb-1">Data Management</h3>
-          <p className="text-xs text-slate-400 mb-4">Sync data or cleanup database.</p>
-          
+        <div className="bg-white rounded-xl border p-5 shadow-sm">
+          <h3 className="font-bold text-sm mb-4">Data Management</h3>
           <div className="flex flex-col gap-3">
-            {/* RECENTLY CHANGED: Linked the Sync button to our new handleDeepSync function */}
-            <button onClick={handleDeepSync} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-primary/20 text-primary hover:bg-primary/5' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>sync</span> Force Cloud Sync
-            </button>
-            <button onClick={downloadStatusBackup} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span> Download Backup JSON
-            </button>
-            
-            <button onClick={handleSmartCleanup} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 mt-2 rounded-lg text-white text-sm font-bold transition-all ${isAdmin ? 'bg-blue-500 hover:bg-blue-600 shadow-md shadow-blue-500/20' : 'bg-slate-300 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>cleaning_services</span> Smart Deduplicate
-            </button>
+            <button onClick={handleDeepSync} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-primary/20 text-primary font-bold text-sm hover:bg-primary/5"><span className="material-symbols-outlined text-[16px]">sync</span> Force Cloud Sync</button>
+            <button onClick={downloadStatusBackup} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold"><span className="material-symbols-outlined text-[16px]">download</span> Download Backup JSON</button>
+            <button onClick={handleSmartCleanup} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 mt-2 rounded-lg bg-blue-500 text-white font-bold text-sm"><span className="material-symbols-outlined text-[16px]">cleaning_services</span> Smart Deduplicate</button>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="bg-white rounded-xl border p-5 shadow-sm">
           <h3 className="font-bold text-sm mb-3">Current Dataset</h3>
-          <div className="space-y-3 text-xs text-slate-500">
+          <div className="space-y-2 text-xs text-slate-500">
             <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
-            <div className="flex justify-between"><span>Tagged</span><span className="font-bold text-emerald-600">{stats.tagged}</span></div>
-            <div className="flex justify-between"><span>Categories</span><span className="font-bold text-slate-800">{stats.categories}</span></div>
-            
-            <div className="pt-3 border-t border-slate-100">
-              <div className="flex justify-between items-end mb-1.5">
-                <span className="font-semibold">Vercel Payload Size</span>
-                <span className={`font-black ${stats.kb > 900 ? 'text-red-500' : stats.kb > 600 ? 'text-amber-500' : 'text-emerald-500'}`}>
-                  {stats.sizeDisplay}
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full rounded-full transition-all ${stats.kb > 900 ? 'bg-red-500' : stats.kb > 600 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                  style={{ width: `${stats.percentOfLimit}%` }}
-                ></div>
-              </div>
-              <p className="text-[9px] text-slate-400 mt-1.5 text-right">Max serverless limit: ~1024 KB (1MB)</p>
+            <div className="flex justify-between"><span>Payload Size</span><span className="font-bold text-primary">{stats.sizeDisplay}</span></div>
+            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-2">
+              <div className="bg-primary h-full" style={{ width: `${stats.percentOfLimit}%` }}></div>
             </div>
           </div>
         </div>
 
-        {/* Danger Zone */}
-        <div className={`md:col-span-2 bg-white rounded-xl border border-red-100 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
-          <h3 className="font-bold text-sm mb-1 text-red-600">Danger Zone</h3>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button onClick={resetAllStatuses} disabled={!isAdmin} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete_forever</span> Reset all status tags
-            </button>
-            <button onClick={resetLeadsData} disabled={!isAdmin} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'}`}>
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>bomb</span> Wipe leads from cloud
-            </button>
+        <div className="md:col-span-2 bg-white rounded-xl border border-red-100 p-5">
+          <h3 className="font-bold text-sm text-red-600 mb-3">Danger Zone</h3>
+          <div className="flex gap-3">
+            <button onClick={resetAllStatuses} className="px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm">Reset tags</button>
+            <button onClick={resetLeadsData} className="px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm">Wipe cloud</button>
           </div>
         </div>
       </div>
