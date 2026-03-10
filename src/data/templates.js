@@ -12,49 +12,45 @@ export const TEMPLATES = {
   },
   whatsapp: {
   job: {
-    build: (name) => 
+  build: (name) => 
 `Hi ${name} team 👋
 
-My name is Devdeep. I'm a web developer who enjoys building design-focused websites and interactive web experiences.
+I'm Devdeep — a developer who builds design-focused websites and interactive UI.
 
-I recently came across your work and thought I'd reach out to see if you're open to collaborating with freelance developers.
+Saw your work and thought I'd quickly reach out. If you ever collaborate with freelance devs, I'd love to connect.
 
-Here's a quick look at some of my work:
-https://devdeepsahaportfolio.vercel.app/
-
-Would love to connect if that sounds relevant 🙂`
-  },
+Portfolio:
+https://devdeepsahaportfolio.vercel.app/`
+},
 
   build: {
-    build: (name) => 
+  build: (name) => 
 `Hi ${name} 👋
 
-I was just checking out your business online and noticed you don't seem to have a dedicated website yet (or it could use a small refresh).
+I was looking up your business and noticed there isn’t a proper website yet.
 
-I'm Devdeep, a freelance developer who helps businesses build clean, modern websites that load fast and look professional.
+I'm Devdeep, a developer who builds simple modern websites for businesses.
 
-If you're ever considering improving your online presence, I'd be happy to help.
+If you plan to make one, I would be happy to help. Would you want a quick sample? 
 
-You can see some of my work here:
-https://devwebstudio.vercel.app/
-
-No pressure at all — just thought I'd reach out 🙂`
-  },
+Portfolio:
+https://devwebstudio.vercel.app/`
+},
 
   build_plus: {
-    build: (name) => 
+  build: (name) => 
 `Hi ${name} 👋
 
-I came across your website and had a few ideas on how the homepage could look more modern and structured.
+I came across your website and tried redesigning the homepage concept for fun.
 
-Just for fun, I actually drafted a quick visual concept for how it could look (I'll attach it here).
+Sending it here — thought you might like the idea.
 
-I'm a freelance web developer who focuses on clean design and fast, performance-optimized websites.
+I'm Devdeep, a web developer who focuses on clean modern websites.
 
-If you're curious to explore the idea further, feel free to check my work:
-https://devwebstudio.vercel.app/
+If you'd ever like help improving the site, happy to chat.
 
-Happy to share a few suggestions if you're interested 🙂`
-  }
+Portfolio:
+https://devwebstudio.vercel.app/`
+}
 }
 };
