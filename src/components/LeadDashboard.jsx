@@ -20,7 +20,7 @@ export default function LeadDashboard() {
   const [syncStatus, setSyncStatus] = useState('synced');
   const [isCalOpen, setIsCalOpen] = useState(false);
   
-  // RECENTLY CHANGED: Added dataMode to toggle between Local and Cloud
+  // RECENTLY RESTORED: Hybrid Data states
   const [dataMode, setDataMode] = useState('local'); 
   const [dataSource, setDataSource] = useState("Local File");
 
@@ -28,6 +28,7 @@ export default function LeadDashboard() {
   const [adminKey, setAdminKey] = useState("");
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('all');
@@ -88,12 +89,20 @@ export default function LeadDashboard() {
         setRangeFilters({ ratingMin: 0, ratingMax: 5, reviewsMin: 0, reviewsMax: 5000 });
         setPage(1);
       }
+      if (key === 'p') {
+        e.preventDefault();
+        const targetPage = prompt("Go to page number:");
+        if (targetPage !== null) {
+          const parsed = parseInt(targetPage, 10);
+          if (!isNaN(parsed) && parsed > 0) { setPage(parsed); setActiveView('leads'); }
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [rangeFilters]);
 
-  // RECENTLY CHANGED: Hybrid initialization logic
+  // Hybrid Load Logic
   useEffect(() => {
     const initializeApp = async () => {
       setIsLoading(true);
@@ -117,12 +126,10 @@ export default function LeadDashboard() {
         }
       } catch (err) { console.error(err); }
 
-      // Selection logic based on dataMode
       const baseLeads = (dataMode === 'cloud' && Array.isArray(fetchedCloudLeads) && fetchedCloudLeads.length > 0)
         ? fetchedCloudLeads 
         : FALLBACK_LEADS;
 
-      // Always apply Cloud Statuses/Tags to the chosen base
       const mergedLeads = baseLeads.map(l => ({
         ...l,
         id: String(l.id),
@@ -137,7 +144,7 @@ export default function LeadDashboard() {
       setDataSource(dataMode === 'cloud' ? "Vercel Cloud" : "Local File");
     };
     initializeApp();
-  }, [dataMode]); // Re-run when toggle changes
+  }, [dataMode]);
 
   const syncToCloud = async (updatedLeads, updatedDaily, updatedOutreach, currentKey) => {
     try {
@@ -165,6 +172,34 @@ export default function LeadDashboard() {
   const handleUpdateDaily = (newDaily) => { setDailyData(newDaily); syncToCloud(leads, newDaily, outreachLog, adminKey); };
   const handleUpdateOutreach = (newOutreach) => { setOutreachLog(newOutreach); syncToCloud(leads, dailyData, newOutreach, adminKey); };
 
+  const handleDeleteOutreach = (timestamp) => {
+    if (!isAdmin) return alert("Unlock Admin Mode.");
+    const deletedEntry = outreachLog.find(e => e.ts === timestamp);
+    if (!deletedEntry) return;
+    const updatedLog = outreachLog.filter(e => e.ts !== timestamp);
+    const today = getLocalDateString();
+    const entryDate = getLocalDateString(new Date(deletedEntry.ts));
+    let updatedDaily = dailyData;
+    if (entryDate === today) {
+      const newCounts = { ...dailyData.counts };
+      if (newCounts[deletedEntry.tplKey] > 0) newCounts[deletedEntry.tplKey]--;
+      updatedDaily = { ...dailyData, counts: newCounts };
+      setDailyData(updatedDaily);
+    }
+    setOutreachLog(updatedLog); syncToCloud(leads, updatedDaily, updatedLog, adminKey);
+  };
+
+  const handleExportMarked = () => {
+    const marked = leads.filter((l) => l.checked);
+    if (!marked.length) return alert("No leads checked!");
+    const header = ["Name", "Phone", "Website", "Email", "Category", "Rating", "Reviews", "Status"];
+    const rows = marked.map((l) => [l.name, l.phone, l.website, l.email, l.category, l.rating, l.reviews, l.status].map(v => `"${(v || "").toString().replace(/"/g, '""')}"`));
+    const csv = [header, ...rows].map(r => r.join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "leads_export.csv"; a.click();
+  };
+
   const handleLocateOnMap = (lead) => {
     if (!lead.lat || !lead.lng) return alert("No coordinates.");
     setSelectedMapLead({ ...lead, _triggerTime: Date.now() }); setActiveView('dashboard');
@@ -180,49 +215,46 @@ export default function LeadDashboard() {
 
   return (
     <div className="bg-background-light text-slate-900 font-display h-screen flex flex-col overflow-hidden">
-      <OutreachCalendar isOpen={isCalOpen} onClose={() => setIsCalOpen(false)} outreachLog={outreachLog} onDeleteEntry={(ts) => {/* handle delete */}} />
-      {isLoading && (
-        <div className="fixed inset-0 bg-white/95 z-[9999] flex flex-col items-center justify-center gap-4">
-          <div className="spinner border-3 border-primary/20 border-t-primary rounded-full w-10 h-10 animate-spin" />
-          <p className="text-sm font-semibold text-slate-500">Syncing Hybrid Data...</p>
-        </div>
-      )}
+      <OutreachCalendar isOpen={isCalOpen} onClose={() => setIsCalOpen(false)} outreachLog={outreachLog} onDeleteEntry={handleDeleteOutreach} />
       
       <header className="flex-shrink-0 flex items-center justify-between border-b border-primary/10 bg-white px-4 lg:px-6 py-3 z-30 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 lg:gap-6">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white"><span className="material-symbols-outlined">table_view</span></div>
-            <h2 className="text-sm lg:text-lg font-black uppercase">LeadFlow</h2>
+            <div className="flex h-9 w-9 lg:h-10 lg:w-10 items-center justify-center rounded-lg bg-primary text-white"><span className="material-symbols-outlined">table_view</span></div>
+            <div className="flex flex-col"><h2 className="text-sm lg:text-lg font-black uppercase">LeadFlow</h2><span className="text-[9px] font-bold text-primary uppercase hidden sm:block">CSV Enterprise</span></div>
           </div>
           
-          {/* RECENTLY CHANGED: Data Mode Toggle Dropdown */}
-          <div className="hidden sm:flex items-center gap-2 ml-4 px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200">
+          {/* RESTORED: Search Bar in Header */}
+          <div className="hidden lg:flex items-center gap-1 border-l border-primary/20 pl-6 ml-2 relative">
+            <span className="material-symbols-outlined absolute left-9 text-slate-400" style={{ fontSize: '18px' }}>search</span>
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-10 w-80 rounded-lg border border-primary/15 bg-primary/5 pl-10 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/40 transition-all" placeholder="Search (C to clear)..." />
+            {searchQuery && (<button onClick={() => setSearchQuery('')} className="absolute right-3 text-slate-400 hover:text-slate-700 transition-colors"><span className="material-symbols-outlined" style={{ fontSize: '16px' }}>close</span></button>)}
+          </div>
+
+          {/* RESTORED: Data Selector in Header */}
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200">
             <span className="material-symbols-outlined text-slate-400" style={{fontSize: '16px'}}>database</span>
-            <select 
-              value={dataMode} 
-              onChange={(e) => setDataMode(e.target.value)}
-              className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-600 cursor-pointer"
-            >
+            <select value={dataMode} onChange={(e) => setDataMode(e.target.value)} className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-600 cursor-pointer">
               <option value="local">Local File</option>
               <option value="cloud">Cloud DB</option>
             </select>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button onClick={handleToggleAdmin} className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${isAdmin ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
+        <div className="flex items-center gap-2 lg:gap-4">
+          <button onClick={handleToggleAdmin} className={`w-8 h-8 lg:w-9 lg:h-9 rounded-lg flex items-center justify-center transition-all ${isAdmin ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`} title="Lock Mode">
             <span className="material-symbols-outlined">{isAdmin ? 'lock_open' : 'lock'}</span>
           </button>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-            <span className="hidden sm:inline font-bold uppercase tracking-tighter">{syncStatus}</span>
-          </div>
+          <button onClick={() => setShowShortcutsHelp(true)} className="w-8 h-8 lg:w-9 lg:h-9 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center" title="Shortcuts (?)"><span className="material-symbols-outlined">help</span></button>
+          <div className="flex items-center gap-1.5 lg:gap-2 text-[10px] lg:text-xs text-slate-500"><span className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} /><span className="hidden sm:inline font-medium uppercase">{syncStatus}</span></div>
+          <button onClick={handleExportMarked} className="flex h-8 lg:h-10 items-center gap-1 lg:gap-2 rounded-lg bg-primary px-3 lg:px-4 text-[11px] lg:text-sm font-bold text-white shadow-md shadow-primary/25 hover:bg-primary/90 transition-all ml-1 lg:ml-0"><span className="material-symbols-outlined" style={{ fontSize: '15px' }}>ios_share</span><span className="hidden sm:inline">Export</span></button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
-        <aside className={`hidden lg:flex flex-col border-r border-primary/10 bg-white`} style={{ width: sidebarCollapsed ? '72px' : '240px' }}>
-          <nav className="flex flex-col gap-2 px-3 mt-4">{NavItems.map(item => (<a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveView(item.id); }} className={`flex items-center rounded-xl px-4 py-3 gap-3 ${activeView === item.id ? 'bg-primary text-white' : 'text-slate-500 hover:bg-primary/5'}`}><span className="material-symbols-outlined">{item.icon}</span>{!sidebarCollapsed && <span className="font-bold text-sm">{item.label}</span>}</a>))}</nav>
+        <aside className={`hidden lg:flex flex-col border-r border-primary/10 bg-white transition-all`} style={{ width: sidebarCollapsed ? '72px' : '240px' }}>
+          <div className="flex items-center justify-center p-4"><button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-primary/10 text-slate-400 transition-colors"><span className="material-symbols-outlined">{sidebarCollapsed ? 'side_navigation' : 'menu_open'}</span></button></div>
+          <nav className="flex flex-col gap-2 px-3 mt-2">{NavItems.map(item => (<a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setActiveView(item.id); }} className={`flex items-center rounded-xl transition-all duration-200 ${sidebarCollapsed ? 'justify-center h-12 w-12 mx-auto' : 'px-4 py-3 gap-3'} ${activeView === item.id ? 'bg-primary text-white shadow-md' : 'text-slate-500 hover:bg-primary/5'}`}><span className="material-symbols-outlined flex-shrink-0">{item.icon}</span>{!sidebarCollapsed && <span className="font-bold text-sm tracking-tight">{item.label}</span>}</a>))}</nav>
         </aside>
 
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 lg:pb-0 w-full relative">
@@ -233,13 +265,8 @@ export default function LeadDashboard() {
         </main>
 
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-primary/10 bg-white px-4 pb-safe pt-2 z-[60] shadow-lg">
-          <div className="flex justify-around items-center max-w-lg mx-auto">
-            {NavItems.map(item => (
-              <button key={item.id} onClick={() => setActiveView(item.id)} className={`flex flex-col items-center gap-0.5 pt-1 ${activeView === item.id ? 'text-primary' : 'text-slate-400'}`}>
-                <span className="material-symbols-outlined">{item.icon}</span>
-                <span className="text-[10px] font-bold">{item.label}</span>
-              </button>
-            ))}
+          <div className="flex justify-around items-center max-w-lg mx-auto pb-1">
+            {NavItems.map(item => (<button key={item.id} onClick={() => setActiveView(item.id)} className={`flex flex-col items-center gap-0.5 pt-1 ${activeView === item.id ? 'text-primary' : 'text-slate-400'}`}><span className={`material-symbols-outlined ${activeView === item.id ? 'fill-1' : ''}`} style={{ fontSize: '24px' }}>{item.icon}</span><span className="text-[10px] font-bold">{item.label}</span></button>))}
           </div>
         </nav>
       </div>
