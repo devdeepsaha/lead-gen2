@@ -2,8 +2,9 @@ import React from 'react';
 
 export default function LeadTableDesktop({
   leads, setLeads, paginatedLeads, isAdmin, copyMode, 
-  handleStatusClick, handleCopyTemplate, handleEmailCopy, updateLead,
-  onLocate // RECENTLY CHANGED: Received map handler
+  handleStatusClick, handleCopyTemplate, handleEmailCopy, 
+  handlePhoneCopy, // RECENTLY CHANGED: Received phone copy handler
+  updateLead, onLocate
 }) {
   return (
     <div className="hidden md:block flex-1 overflow-auto bg-white">
@@ -44,7 +45,6 @@ export default function LeadTableDesktop({
                 </td>
                 <td className="px-4 py-4 min-w-[220px]">
                   <div className="flex items-center gap-1.5">
-                    {/* RECENTLY CHANGED: Added click handler, styling, and map icon if coordinates exist */}
                     <span 
                       className={`font-bold text-sm truncate max-w-[220px] block ${l.lat && l.lng ? 'text-slate-900 cursor-pointer hover:text-primary hover:underline' : 'text-slate-900'}`}
                       onClick={() => { if(l.lat && l.lng) onLocate(l); }}
@@ -75,8 +75,23 @@ export default function LeadTableDesktop({
                 <td className="px-4 py-4 text-center text-xs font-medium text-slate-500">{l.reviews ? Number(l.reviews).toLocaleString() : "—"}</td>
                 <td className="px-4 py-4">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-bold text-slate-600 font-mono">{l.phone || "—"}</span>
-                    {l.email && <span className="text-[10px] text-primary truncate max-w-[140px] cursor-pointer hover:underline font-medium" onClick={() => handleEmailCopy(l.email)} title="Click to copy">{l.email}</span>}
+                    {/* RECENTLY CHANGED: Added click-to-copy handler and hover styles to phone number */}
+                    <span 
+                      className={`text-[11px] font-bold font-mono transition-colors ${l.phone ? 'text-slate-600 cursor-pointer hover:text-primary hover:underline' : 'text-slate-300'}`}
+                      onClick={() => l.phone && handlePhoneCopy(l.phone)}
+                      title={l.phone ? "Click to copy phone" : ""}
+                    >
+                      {l.phone || "—"}
+                    </span>
+                    {l.email && (
+                      <span 
+                        className="text-[10px] text-primary truncate max-w-[140px] cursor-pointer hover:underline font-medium" 
+                        onClick={() => handleEmailCopy(l.email)} 
+                        title="Click to copy email"
+                      >
+                        {l.email}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-4">

@@ -2,8 +2,9 @@ import React from 'react';
 
 export default function LeadTableMobile({
   paginatedLeads, isAdmin, copyMode, handleStatusClick, 
-  handleCopyTemplate, handleEmailCopy, updateLead,
-  onLocate // RECENTLY CHANGED: Received map handler
+  handleCopyTemplate, handleEmailCopy, 
+  handlePhoneCopy, // RECENTLY CHANGED: Received phone copy handler
+  updateLead, onLocate
 }) {
   return (
     <div className="md:hidden flex-1 overflow-y-auto px-4 py-2 space-y-4">
@@ -19,7 +20,6 @@ export default function LeadTableMobile({
             <div className="p-4 pb-3">
               <div className="flex justify-between items-start gap-2">
                 <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                  {/* RECENTLY CHANGED: Applied interactive map click directly to the Mobile Title */}
                   <h3 
                     className={`font-bold text-sm leading-tight truncate flex items-center gap-1 ${l.lat && l.lng ? 'text-slate-900 cursor-pointer hover:text-primary active:text-primary' : 'text-slate-900'}`}
                     onClick={() => { if(l.lat && l.lng) onLocate(l); }}
@@ -37,13 +37,17 @@ export default function LeadTableMobile({
                   )}
                   
                   <div className="flex flex-wrap items-center gap-3 mt-1">
+                    {/* RECENTLY CHANGED: Added click-to-copy handler and styling to mobile phone view */}
                     {l.phone && (
-                      <span className="text-[11px] text-slate-500 font-mono flex items-center gap-1">
+                      <span 
+                        className="text-[11px] text-slate-500 font-mono flex items-center gap-1 cursor-pointer active:text-primary transition-colors"
+                        onClick={() => handlePhoneCopy(l.phone)}
+                      >
                         <span className="material-symbols-outlined text-slate-300" style={{ fontSize: '13px' }}>phone</span>{l.phone}
                       </span>
                     )}
                     {l.email && (
-                      <span className="text-[11px] text-primary cursor-pointer border-b border-dashed border-primary/40 hover:text-purple-700 hover:border-purple-700 transition-colors" onClick={() => handleEmailCopy(l.email)}>
+                      <span className="text-[11px] text-primary cursor-pointer border-b border-dashed border-primary/40 hover:text-purple-700 active:text-purple-700 transition-colors" onClick={() => handleEmailCopy(l.email)}>
                         {l.email}
                       </span>
                     )}

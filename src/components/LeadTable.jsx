@@ -136,6 +136,12 @@ export default function LeadTable({
     navigator.clipboard.writeText(email).then(() => showToast("📋 Copied " + email));
   };
 
+  // RECENTLY CHANGED: Added phone copy handler to match email copy behavior
+  const handlePhoneCopy = (phone) => {
+    if (!phone) return;
+    navigator.clipboard.writeText(phone).then(() => showToast("📞 Copied phone: " + phone));
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative bg-background-light md:bg-white">
       {toastMsg && (
@@ -159,18 +165,22 @@ export default function LeadTable({
         filteredCount={filteredLeads.length}
       />
 
+      {/* RECENTLY CHANGED: Passed handlePhoneCopy down */}
       <LeadTableDesktop 
         leads={leads} setLeads={setLeads} paginatedLeads={paginatedLeads}
         isAdmin={isAdmin} copyMode={copyMode}
         handleStatusClick={handleStatusClick} handleCopyTemplate={handleCopyTemplate}
-        handleEmailCopy={handleEmailCopy} updateLead={updateLead}
+        handleEmailCopy={handleEmailCopy} handlePhoneCopy={handlePhoneCopy} 
+        updateLead={updateLead}
         onLocate={onLocate} 
       />
 
+      {/* RECENTLY CHANGED: Passed handlePhoneCopy down */}
       <LeadTableMobile 
         paginatedLeads={paginatedLeads} isAdmin={isAdmin} copyMode={copyMode}
         handleStatusClick={handleStatusClick} handleCopyTemplate={handleCopyTemplate}
-        handleEmailCopy={handleEmailCopy} updateLead={updateLead}
+        handleEmailCopy={handleEmailCopy} handlePhoneCopy={handlePhoneCopy}
+        updateLead={updateLead}
         onLocate={onLocate} 
       />
 

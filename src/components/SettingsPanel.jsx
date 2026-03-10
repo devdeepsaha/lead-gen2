@@ -20,6 +20,33 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     return { total: leads.length, tagged, categories, sizeDisplay, percentOfLimit, kb };
   }, [leads]);
 
+  // RECENTLY CHANGED: New helper to handle a deep manual sync of everything
+  const handleDeepSync = async () => {
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode to sync.");
+    
+    setUploadStatus({ msg: "Pushing all data to Vercel KV...", type: "loading" });
+    
+    try {
+      // 1. Sync the Base Leads (The heavy CSV data)
+      const resLeads = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(leads)
+      });
+
+      if (!resLeads.ok) throw new Error("Failed to sync base leads.");
+
+      // 2. Trigger the standard Status/Daily sync
+      await onForceSync();
+
+      setUploadStatus({ msg: "✅ Deep Cloud Sync Complete! All leads and tags are safe.", type: "success" });
+      setTimeout(() => setUploadStatus({ msg: '', type: '' }), 4000);
+      
+    } catch (err) {
+      setUploadStatus({ msg: `❌ Sync failed: ${err.message}`, type: "error" });
+    }
+  };
+
   const parseCSVRow = (line) => {
     const result = [];
     let cur = "", inQ = false;
@@ -192,45 +219,24 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     }
   };
 
-  const saveDailyGoal = () => {
-    if (!isAdmin) return alert("🔒 Unlock Admin Mode to change the daily goal.");
-    const val = Math.max(1, Math.min(200, goalInput));
-    setDailyData({ ...dailyData, goal: val });
-    alert(`🎯 Goal set to ${val}/day`);
-  };
-
-  const downloadStatusBackup = () => {
-    if (!isAdmin) return alert("🔒 Unlock Admin Mode to download database backups.");
-    const map = {};
-    leads.forEach((l) => { map[l.id] = l.status; });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(map, null, 2)], { type: "application/json" }));
-    a.download = "leadflow_statuses_backup.json";
-    a.click();
-  };
-
   const resetAllStatuses = () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to reset statuses.");
     if (!window.confirm("Reset ALL status tags on all devices? This will wipe your progress.")) return;
     setLeads(leads.map(l => ({ ...l, status: 'none', replied: false })));
   };
 
-  // RECENTLY CHANGED: This is the Nuclear Cloud Wipe button. It forces an empty array into Vercel KV.
   const resetLeadsData = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to wipe the database.");
-    if (!window.confirm("NUKE THE CLOUD? This will delete the stubborn 1899 leads from Vercel KV so your app can finally use your clean local file. Proceed?")) return;
+    if (!window.confirm("NUKE THE CLOUD? This will delete the leads from Vercel KV. Proceed?")) return;
     
     try {
       setUploadStatus({ msg: "Nuking cloud data...", type: "loading" });
-      
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([]) // Sends exactly 0 leads to the cloud to overwrite the stuck payload
+        body: JSON.stringify([]) 
       });
-
       if (!res.ok) throw new Error(`Server error ${res.status}`);
-
       setUploadStatus({ msg: "✅ Cloud Database Wiped! Please refresh the page now.", type: "success" });
     } catch (err) {
       setUploadStatus({ msg: `❌ Failed to wipe cloud: ${err.message}`, type: 'error' });
@@ -255,7 +261,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           <div className="flex items-start justify-between mb-3">
             <div>
               <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Drop a CSV to enrich existing leads (like adding map coordinates) or add new ones. Your manual status tags are preserved.</p>
+              <p className="text-xs text-slate-400 mt-0.5">Preserves manual tags. Preserves coordinates.</p>
             </div>
             <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Staged Upload</span>
           </div>
@@ -270,7 +276,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           >
             <span className={`material-symbols-outlined block mb-2 ${isAdmin ? 'text-primary/40' : 'text-slate-300'}`} style={{ fontSize: '36px' }}>{isAdmin ? 'upload_file' : 'lock'}</span>
             <p className="text-sm font-semibold text-slate-500">Drop CSV here or <span className={isAdmin ? "text-primary" : ""}>click to browse</span></p>
-            <p className="text-[11px] text-slate-400 mt-1">Expects: Place ID, Business Name, Phone, Website, Emails, Category, Address, Rating, Reviews, Latitude, Longitude</p>
             <input type="file" id="csv-file-input" accept=".csv" className="hidden" onChange={(e) => handleFile(e.target.files[0])} disabled={!isAdmin} />
           </div>
           
@@ -284,10 +289,11 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         {/* Sync & Backup */}
         <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
           <h3 className="font-bold text-sm mb-1">Data Management</h3>
-          <p className="text-xs text-slate-400 mb-4">Sync statuses to cloud or deduplicate database.</p>
+          <p className="text-xs text-slate-400 mb-4">Sync data or cleanup database.</p>
           
           <div className="flex flex-col gap-3">
-            <button onClick={onForceSync} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-primary/20 text-primary hover:bg-primary/5' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
+            {/* RECENTLY CHANGED: Linked the Sync button to our new handleDeepSync function */}
+            <button onClick={handleDeepSync} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-primary/20 text-primary hover:bg-primary/5' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>sync</span> Force Cloud Sync
             </button>
             <button onClick={downloadStatusBackup} disabled={!isAdmin} className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'border-slate-200 text-slate-700 hover:bg-slate-50' : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'}`}>
@@ -306,7 +312,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
             <div className="flex justify-between"><span>Total leads</span><span className="font-bold text-slate-800">{stats.total}</span></div>
             <div className="flex justify-between"><span>Tagged</span><span className="font-bold text-emerald-600">{stats.tagged}</span></div>
             <div className="flex justify-between"><span>Categories</span><span className="font-bold text-slate-800">{stats.categories}</span></div>
-            <div className="flex justify-between"><span>Data source</span><span className="font-bold text-primary">Live Dashboard Status</span></div>
             
             <div className="pt-3 border-t border-slate-100">
               <div className="flex justify-between items-end mb-1.5">
@@ -329,7 +334,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         {/* Danger Zone */}
         <div className={`md:col-span-2 bg-white rounded-xl border border-red-100 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
           <h3 className="font-bold text-sm mb-1 text-red-600">Danger Zone</h3>
-          <p className="text-xs text-slate-400 mb-3">These actions affect all devices and cannot be undone.</p>
           <div className="flex flex-col sm:flex-row gap-3">
             <button onClick={resetAllStatuses} disabled={!isAdmin} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold transition-all ${isAdmin ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'}`}>
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete_forever</span> Reset all status tags
