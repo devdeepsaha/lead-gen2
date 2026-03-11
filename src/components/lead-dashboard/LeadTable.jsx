@@ -3,7 +3,7 @@ import LeadTableControls from './LeadTableControls';
 import LeadTableDesktop from './LeadTableDesktop';
 import LeadTableMobile from './LeadTableMobile';
 import LeadTablePagination from './LeadTablePagination';
-import { TEMPLATES } from '../data/templates';
+import { TEMPLATES } from '../../data/templates';
 
 // RECENTLY CHANGED: Local time helper added here too
 const getLocalDateString = (d = new Date()) => {
