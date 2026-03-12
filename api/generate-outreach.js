@@ -117,7 +117,7 @@ Examples of good hooks:
 • "Looks like some elements move while the page loads."
 • "I noticed the layout shifts slightly when the page finishes loading."
 • "I noticed the mobile layout stacks a bit tightly."
-  Return ONLY the sentence.
+  Return ONLY the three sentences.
 `;
 
     
