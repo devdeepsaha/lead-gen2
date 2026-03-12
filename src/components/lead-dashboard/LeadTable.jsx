@@ -126,39 +126,42 @@ export default function LeadTable({
 
   // RECENTLY ADDED: Calls the Vercel Serverless Function to get AI personalization
   const handleGenerateSmartOutreach = async (userThought) => {
-    const { lead } = personalizeModal;
-    const tpl = TEMPLATES[copyMode][lead.status];
-  
-const authKey = sessionStorage.getItem('admin_session_key') || import.meta.env.VITE_ADMIN_KEY;
+  const { lead } = personalizeModal;
+  const tpl = TEMPLATES[copyMode][lead.status];
+  const authKey = sessionStorage.getItem('admin_session_key') || import.meta.env.VITE_ADMIN_KEY;
 
-    try {
-      const res = await fetch('/api/generate-outreach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leadName: lead.name,
-          category: lead.category,
-          status: lead.status,
-          userThought: userThought,
-          auth: authKey
-        })
-      });
+  try {
+    const res = await fetch('/api/generate-outreach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        leadName: lead.name,
+        category: lead.category,
+        status: lead.status,
+        userThought: userThought,
+        auth: authKey
+      })
+    });
 
-      const data = await res.json();
-      if (res.ok) {
-        const finalMsg = `${data.message}\n\n${tpl.build(lead.name)}`;
-        await navigator.clipboard.writeText(finalMsg);
-        logOutreachInternal(lead);
-        showToast("AI Message Copied");
-      } else {
-        showToast("Error: " + data.message);
-      }
-    } catch (err) {
-      showToast("AI Sync Failed");
-    } finally {
-      setPersonalizeModal({ isOpen: false, lead: null });
+    const data = await res.json();
+    if (res.ok) {
+      const baseTemplate = tpl.build(lead.name);
+      
+      // RECENTLY CHANGED: Replace the placeholder with the AI message
+      const finalMsg = baseTemplate.replace('[AI_HOOK]', data.message);
+
+      await navigator.clipboard.writeText(finalMsg);
+      logOutreachInternal(lead);
+      showToast("✨ Smart Message Copied!");
+    } else {
+      showToast("Error: " + data.message);
     }
-  };
+  } catch (err) {
+    showToast("AI Sync Failed");
+  } finally {
+    setPersonalizeModal({ isOpen: false, lead: null });
+  }
+};
 
   const handleEmailCopy = (email) => {
     navigator.clipboard.writeText(email).then(() => showToast("Copied " + email));
