@@ -5,9 +5,15 @@ export default async function handler(req, res) {
 
   const { leadName, category, status, userThought, auth } = req.body;
 
-  // Security check against your Vercel Environment Variable
+  // RECENTLY ADDED: Debug logs to see why 401 is happening
+  console.log("Auth received from frontend:", auth);
+  console.log("Admin Key stored in Vercel:", process.env.ADMIN_KEY);
+
   if (auth !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ 
+      message: 'Unauthorized', 
+      debug: "Check Vercel Logs for comparison" 
+    });
   }
 
   try {
