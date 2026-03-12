@@ -109,22 +109,35 @@ export default function App() {
   };
 
   const handleDeleteEntry = async (timestamp) => {
+    // 1. Identify what we are deleting before it's gone
+    const entryToDelete = outreachLog.find(e => e.ts === timestamp);
+    if (!entryToDelete) return;
+
+    // 2. Create the updated log
     const updatedLog = outreachLog.filter(entry => entry.ts !== timestamp);
     setOutreachLog(updatedLog);
     
+    // 3. Check if the entry happened TODAY
     const entryDate = getLocalDateString(new Date(timestamp));
-    if (entryDate === dailyData.date) {
-      const entryToDelete = outreachLog.find(e => e.ts === timestamp);
+    const todayStr = getLocalDateString();
+
+    let updatedDaily = dailyData;
+
+    if (entryDate === todayStr) {
+      // RECENTLY CHANGED: Logic to decrement the daily card counter
       const newCounts = { ...dailyData.counts };
-      if (entryToDelete && newCounts[entryToDelete.tplKey] > 0) {
-        newCounts[entryToDelete.tplKey]--;
-        const updatedDaily = { ...dailyData, counts: newCounts };
-        setDailyData(updatedDaily);
-        syncToCloud(leads, updatedDaily, updatedLog, adminKey); // SYNC EVERYTHING
-        return;
+      const type = entryToDelete.tplKey; // 'job', 'build_no_demo', or 'build_demo'
+
+      if (newCounts[type] > 0) {
+        newCounts[type] -= 1;
       }
+
+      updatedDaily = { ...dailyData, counts: newCounts };
+      setDailyData(updatedDaily);
     }
-    syncToCloud(leads, dailyData, updatedLog, adminKey);
+
+    // 4. Sync the updated log AND the updated daily counts to the cloud
+    syncToCloud(leads, updatedDaily, updatedLog, adminKey);
   };
 
   useEffect(() => {

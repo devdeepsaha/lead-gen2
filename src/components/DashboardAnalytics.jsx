@@ -45,13 +45,17 @@ export default function DashboardAnalytics({
     return { job, build, buildPlus, skip, dismissed, free, tagged, total, unset: skip, pct, replied };
   }, [leads]);
 
+  // RECENTLY CHANGED: Ensure counts are derived strictly from the current dailyData state
   const todayStr = getLocalDateString();
   const isToday = dailyData.date === todayStr;
+  
   const counts = {
     job: isToday ? (dailyData.counts.job || 0) : 0,
     build_no_demo: isToday ? (dailyData.counts.build_no_demo || 0) : 0,
     build_demo: isToday ? (dailyData.counts.build_demo || 0) : 0
   };
+
+  // RECENTLY CHANGED: Recalculate totals dynamically to handle deletions correctly
   const dailyTotal = Object.values(counts).reduce((a, b) => a + b, 0);
   const dailyPct = Math.min(100, Math.round((dailyTotal / (dailyData.goal || 10)) * 100));
 
@@ -70,10 +74,10 @@ export default function DashboardAnalytics({
   };
 
   return (
-    <div id="view-dashboard" className="flex-1 p-4 lg:p-6 overflow-y-auto flex flex-col scroll-smooth select-text">
+    <div id="view-dashboard" className="flex-1 p-4 lg:p-6 overflow-y-auto flex flex-col scroll-smooth select-text custom-scrollbar">
       {/* Title Section */}
       <div className="mb-5 hidden lg:block">
-        <h1 className="text-2xl font-black tracking-tight">Dashboard Analytics</h1>
+        <h1 className="text-2xl font-black tracking-tight text-slate-800">Dashboard Analytics</h1>
         <p className="text-sm text-slate-500">
           <span className="font-semibold text-slate-700">{stats.total}</span> leads currently active · 
           <span className="text-primary font-medium ml-1">Source: {dataSource}</span>
@@ -105,15 +109,20 @@ export default function DashboardAnalytics({
       </div>
 
       {/* 3. Bottom Row: Map Section */}
-      <div ref={mapSectionRef}>
+      <div ref={mapSectionRef} className="rounded-xl overflow-hidden border border-slate-200 shadow-sm">
         <LeadMap 
           mappableLeads={mappableLeads} 
           selectedMapLead={selectedMapLead} 
           markerRefs={markerRefs} 
           getStatusColor={getStatusColor} 
-          onViewInDirectory={onViewInDirectory} 
+          onViewInDirectory={handleViewInDirectoryInternal} 
         />
       </div>
     </div>
   );
+
+  // Internal helper to ensure navigation works from the map
+  function handleViewInDirectoryInternal(lead) {
+    onViewInDirectory(lead);
+  }
 }
