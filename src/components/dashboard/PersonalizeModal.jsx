@@ -7,25 +7,44 @@ export default function PersonalizeModal({ isOpen, onClose, onGenerate, lead, st
 
   // Helper to process files into Base64 and append to the list
   const processFile = (file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    
-    // Safety limit: 3 images
-    if (screenshots.length >= 3) {
-      alert("Maximum 3 images allowed for analysis.");
-      return;
-    }
+  if (!file || !file.type.startsWith('image/')) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setScreenshots(prev => [...prev, {
-        id: Date.now() + Math.random(),
-        data: reader.result.split(',')[1],
-        type: file.type,
-        preview: reader.result
-      }]);
-    };
-    reader.readAsDataURL(file);
+  if (screenshots.length >= 3) {
+    alert("Maximum 3 images allowed for analysis.");
+    return;
+  }
+
+  const img = new Image();
+  const reader = new FileReader();
+
+  reader.onload = (event) => {
+    img.src = event.target.result;
   };
+
+  img.onload = () => {
+    const MAX_WIDTH = 900; // perfect size for AI analysis
+    const scale = MAX_WIDTH / img.width;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = MAX_WIDTH;
+    canvas.height = img.height * scale;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const compressed = canvas.toDataURL("image/jpeg", 0.8);
+
+    setScreenshots(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      data: compressed.split(',')[1],
+      type: "image/jpeg",
+      preview: compressed
+    }]);
+  };
+
+  reader.readAsDataURL(file);
+};
+    
 
   // RECENTLY CHANGED: Multi-image Paste Listener
   useEffect(() => {
