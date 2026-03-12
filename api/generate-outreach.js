@@ -43,8 +43,15 @@ User Observation:
 Write THREE short natural-sounding sentence that feels like a real person noticed something about the business.
 
 Rules:
-- Never criticize the business or sound negative.
-- Do not use words like: shame, bad, poor, problem, issue, mistake, wrong, broken.
+-Avoid harsh or insulting language.
+-Instead of criticizing, describe what is visible.
+
+-Bad:
+ "The layout is broken."
+
+-Better:
+ "I noticed some elements shift while the page loads."
+ "I noticed the layout moves slightly while scrolling."
 - Keep the tone respectful and neutral.
 - No greetings.
 - No introductions.
@@ -67,7 +74,11 @@ Rules:
 
 Screenshot Analysis Rules:
 
-If screenshots are provided, analyze them before writing the observation.
+If screenshots are provided, you MUST analyze them first.
+
+If any visual UI issue is visible in the screenshots, the FIRST sentence must describe that observation.
+
+Do not ignore visible UI issues.
 
 Look for:
 - Missing images or icons
