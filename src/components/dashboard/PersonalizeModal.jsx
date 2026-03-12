@@ -23,7 +23,7 @@ export default function PersonalizeModal({ isOpen, onClose, onGenerate, lead, st
 
   img.onload = () => {
     const MAX_WIDTH = 900; // perfect size for AI analysis
-    const scale = MAX_WIDTH / img.width;
+    const scale = Math.min(1, MAX_WIDTH / img.width);
 
     const canvas = document.createElement("canvas");
     canvas.width = MAX_WIDTH;
