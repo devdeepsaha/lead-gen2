@@ -3,26 +3,31 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
-  const { leadName, category, status, userThought, auth, rating, reviews, hasWebsite } = req.body;
-
-  // RECENTLY ADDED: Debug logs to see why 401 is happening
-  console.log("Auth received from frontend:", auth);
-  console.log("Admin Key stored in Vercel:", process.env.ADMIN_KEY);
+  // RECENTLY CHANGED: Extracting 'images' array from request body
+  const { 
+    leadName, 
+    category, 
+    userThought, 
+    auth, 
+    rating, 
+    reviews, 
+    hasWebsite, 
+    images // This is our array of { data: base64, type: mimeType }
+  } = req.body;
 
   if (auth !== process.env.ADMIN_KEY) {
     return res.status(401).json({ 
-      message: 'Unauthorized', 
-      debug: "Check Vercel Logs for comparison" 
+      message: 'Unauthorized'
     });
   }
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     
-    // RECENTLY CHANGED: Using the latest alias to ensure 3.1 Flash Lite compatibility
+    // Using 3.1 Flash Lite for fast, multimodal processing
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
-    const systemPrompt = `
+     const systemPrompt = `
 You are helping write a personalized outreach observation.
 
 Context:
@@ -60,6 +65,28 @@ Rules:
 - CLS above 0.25 → layout shifts noticeable
 - Speed Index under 4s → fast
 
+Screenshot Analysis Rules:
+
+If screenshots are provided, analyze them before writing the observation.
+
+Look for:
+- Missing images or icons
+- Layout shifts or elements jumping
+- Buttons that look confusing or misleading
+- Outdated visual design
+- Mobile layout issues
+- Text overlapping or alignment problems
+- Slow loading placeholders
+- Broken or missing UI elements
+
+Describe what you SEE rather than making assumptions.
+Use neutral wording like:
+"I noticed..."
+"Looks like..."
+"Seems like..."
+
+Do not guess things that are not visible in the screenshot.
+
 Examples of good hooks:
 • "I noticed ${leadName} has strong Google reviews but doesn’t seem to have an official website yet."
 • "Saw ${leadName} has over ${reviews} reviews, that kind of reputation deserves a strong website."
@@ -68,7 +95,21 @@ Examples of good hooks:
 Return ONLY the sentence.
 `;
 
-    const result = await model.generateContent(systemPrompt);
+    
+    const promptContent = [systemPrompt];
+
+    if (images && Array.isArray(images)) {
+      images.forEach(img => {
+        promptContent.push({
+          inlineData: {
+            data: img.data,
+            mimeType: img.type
+          }
+        });
+      });
+    }
+
+    const result = await model.generateContent(promptContent);
     const response = await result.response;
     const text = response.text().replace(/["]/g, "").trim();
 
