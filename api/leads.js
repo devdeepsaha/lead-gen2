@@ -1,6 +1,3 @@
-// api/leads.js
-// GET  → returns leads array from KV (or null if not yet seeded)
-// POST → saves leads array to KV (merges with existing, deduplicates)
 
 import { kv } from "@vercel/kv";
 

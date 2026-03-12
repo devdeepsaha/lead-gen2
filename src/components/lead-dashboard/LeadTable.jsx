@@ -3,9 +3,9 @@ import LeadTableControls from './LeadTableControls';
 import LeadTableDesktop from './LeadTableDesktop';
 import LeadTableMobile from './LeadTableMobile';
 import LeadTablePagination from './LeadTablePagination';
+import PersonalizeModal from '../dashboard/PersonalizeModal'; // Ensure correct path
 import { TEMPLATES } from '../../data/templates';
 
-// RECENTLY CHANGED: Local time helper added here too
 const getLocalDateString = (d = new Date()) => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -16,7 +16,6 @@ const getLocalDateString = (d = new Date()) => {
 export default function LeadTable({ 
   leads = [], isAdmin = false, setLeads, 
   dailyData, setDailyData, outreachLog = [], setOutreachLog,
-  
   searchQuery, setSearchQuery,
   statusFilter, setStatusFilter,
   catFilter, setCatFilter,
@@ -25,11 +24,11 @@ export default function LeadTable({
   perPage, setPerPage,
   copyMode, setCopyMode,
   rangeFilters, setRangeFilters,
-
   onLocate 
 }) {
   
   const [toastMsg, setToastMsg] = useState(null);
+  const [personalizeModal, setPersonalizeModal] = useState({ isOpen: false, lead: null });
 
   const MAX_REVIEWS_SLIDER = 5000;
 
@@ -90,56 +89,84 @@ export default function LeadTable({
   const paginatedLeads = filteredLeads.slice((safePage - 1) * perPage, safePage * perPage);
 
   const updateLead = (id, updates) => {
-    if (!isAdmin && updates.status) return showToast("🔒 Unlock Admin Mode to tag leads.");
-    if (!isAdmin && updates.replied !== undefined) return showToast("🔒 Unlock Admin Mode to change reply status.");
+    if (!isAdmin && (updates.status || updates.replied !== undefined)) {
+      return showToast("Unlock Admin Mode to modify leads.");
+    }
     const newLeads = leads.map(l => l.id === id ? { ...l, ...updates } : l);
     setLeads(newLeads);
   };
 
   const handleStatusClick = (id, newStatus) => {
-    if (!isAdmin) return showToast("🔒 Unlock Admin Mode to tag leads.");
+    if (!isAdmin) return showToast("Unlock Admin Mode to tag leads.");
     const lead = leads.find(l => l.id === id);
     const finalStatus = lead.status === newStatus ? 'none' : newStatus;
     updateLead(id, { status: finalStatus });
   };
 
+  // RECENTLY CHANGED: Centralized logging for both AI and standard copy
+  const logOutreachInternal = (lead) => {
+    if (!isAdmin) return;
+    const actualTplKey = lead.status === 'build' ? 'build_no_demo' : lead.status === 'build_plus' ? 'build_demo' : lead.status;
+    const newEntry = { id: lead.id, name: lead.name, category: lead.category || "", tplKey: actualTplKey, ts: Date.now() };
+
+    setOutreachLog([newEntry, ...outreachLog]);
+    const today = getLocalDateString();
+    let newCounts = dailyData.date === today ? { ...dailyData.counts } : { job: 0, build_no_demo: 0, build_demo: 0 };
+    if (newCounts[actualTplKey] !== undefined) newCounts[actualTplKey]++;
+    setDailyData({ ...dailyData, date: today, counts: newCounts });
+  };
+
+  // RECENTLY CHANGED: Updated to trigger the Personalization Modal
   const handleCopyTemplate = (lead) => {
     const tpl = TEMPLATES[copyMode][lead.status];
     if (!tpl) return showToast("Tag lead as Job, Build, or Build+ first");
+    
+    setPersonalizeModal({ isOpen: true, lead: lead });
+  };
 
-    const msg = tpl.build(lead.name);
+  // RECENTLY ADDED: Calls the Vercel Serverless Function to get AI personalization
+  const handleGenerateSmartOutreach = async (userThought) => {
+    const { lead } = personalizeModal;
+    const tpl = TEMPLATES[copyMode][lead.status];
+  
+const authKey = sessionStorage.getItem('admin_session_key') || import.meta.env.VITE_ADMIN_KEY;
 
-    const logOutreach = () => {
-      showToast(`📋 Copied ${copyMode} format for ${lead.name}`);
-      if (!isAdmin) return;
+    try {
+      const res = await fetch('/api/generate-outreach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadName: lead.name,
+          category: lead.category,
+          status: lead.status,
+          userThought: userThought,
+          auth: authKey
+        })
+      });
 
-      const actualTplKey = lead.status === 'build' ? 'build_no_demo' : lead.status === 'build_plus' ? 'build_demo' : lead.status;
-      const newEntry = { id: lead.id, name: lead.name, category: lead.category || "", tplKey: actualTplKey, ts: Date.now() };
-
-      setOutreachLog([newEntry, ...outreachLog]);
-
-      // RECENTLY CHANGED: Generates "today" string using local IST time instead of UTC to fix the rollover bug
-      const today = getLocalDateString();
-      let newCounts = dailyData.date === today ? { ...dailyData.counts } : { job: 0, build_no_demo: 0, build_demo: 0 };
-      if (newCounts[actualTplKey] !== undefined) newCounts[actualTplKey]++;
-      setDailyData({ ...dailyData, date: today, counts: newCounts });
-    };
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(msg).then(logOutreach).catch(logOutreach);
-    } else {
-      logOutreach();
+      const data = await res.json();
+      if (res.ok) {
+        const finalMsg = `${data.message}\n\n${tpl.build(lead.name)}`;
+        await navigator.clipboard.writeText(finalMsg);
+        logOutreachInternal(lead);
+        showToast("AI Message Copied");
+      } else {
+        showToast("Error: " + data.message);
+      }
+    } catch (err) {
+      showToast("AI Sync Failed");
+    } finally {
+      setPersonalizeModal({ isOpen: false, lead: null });
     }
   };
 
   const handleEmailCopy = (email) => {
-    navigator.clipboard.writeText(email).then(() => showToast("📋 Copied " + email));
+    navigator.clipboard.writeText(email).then(() => showToast("Copied " + email));
   };
 
-  // RECENTLY CHANGED: Added phone copy handler to match email copy behavior
   const handlePhoneCopy = (phone) => {
     if (!phone) return;
-    navigator.clipboard.writeText(phone).then(() => showToast("📞 Copied phone: " + phone));
+    navigator.clipboard.writeText(phone).then(() => showToast("Copied phone: " + phone));
   };
 
   return (
@@ -151,42 +178,31 @@ export default function LeadTable({
       )}
 
       <LeadTableControls 
-        isAdmin={isAdmin}
-        searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-        statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-        catFilter={catFilter} setCatFilter={setCatFilter}
-        sortType={sortType} setSortType={setSortType}
-        rangeFilters={rangeFilters} setRangeFilters={setRangeFilters}
-        setPage={setPage}
-        perPage={perPage} setPerPage={setPerPage}
-        copyMode={copyMode} setCopyMode={setCopyMode}
-        categories={categories}
+        {...{ isAdmin, searchQuery, setSearchQuery, statusFilter, setStatusFilter, catFilter, setCatFilter, sortType, setSortType, rangeFilters, setRangeFilters, setPage, perPage, setPerPage, copyMode, setCopyMode, categories }}
         totalLeads={leads.length}
         filteredCount={filteredLeads.length}
       />
 
-      {/* RECENTLY CHANGED: Passed handlePhoneCopy down */}
       <LeadTableDesktop 
-        leads={leads} setLeads={setLeads} paginatedLeads={paginatedLeads}
-        isAdmin={isAdmin} copyMode={copyMode}
-        handleStatusClick={handleStatusClick} handleCopyTemplate={handleCopyTemplate}
-        handleEmailCopy={handleEmailCopy} handlePhoneCopy={handlePhoneCopy} 
-        updateLead={updateLead}
-        onLocate={onLocate} 
+        {...{ leads, setLeads, paginatedLeads, isAdmin, copyMode, handleStatusClick, handleCopyTemplate, handleEmailCopy, handlePhoneCopy, updateLead, onLocate }}
       />
 
-      {/* RECENTLY CHANGED: Passed handlePhoneCopy down */}
       <LeadTableMobile 
-        paginatedLeads={paginatedLeads} isAdmin={isAdmin} copyMode={copyMode}
-        handleStatusClick={handleStatusClick} handleCopyTemplate={handleCopyTemplate}
-        handleEmailCopy={handleEmailCopy} handlePhoneCopy={handlePhoneCopy}
-        updateLead={updateLead}
-        onLocate={onLocate} 
+        {...{ paginatedLeads, isAdmin, copyMode, handleStatusClick, handleCopyTemplate, handleEmailCopy, handlePhoneCopy, updateLead, onLocate }}
       />
 
       <LeadTablePagination 
         safePage={safePage} totalPages={totalPages} setPage={setPage}
         filteredCount={filteredLeads.length} perPage={perPage}
+      />
+
+      {/* RECENTLY ADDED: Personalize Modal */}
+      <PersonalizeModal 
+        isOpen={personalizeModal.isOpen}
+        lead={personalizeModal.lead}
+        status={personalizeModal.lead?.status}
+        onClose={() => setPersonalizeModal({ isOpen: false, lead: null })}
+        onGenerate={handleGenerateSmartOutreach}
       />
     </div>
   );
