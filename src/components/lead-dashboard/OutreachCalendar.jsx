@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 
-// This helper forces the date to strictly use your local timezone
 const getLocalDateString = (d = new Date()) => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -10,15 +9,14 @@ const getLocalDateString = (d = new Date()) => {
 
 export default function OutreachCalendar({ isOpen, onClose, outreachLog = [], onDeleteEntry }) {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDayKey, setSelectedDayKey] = useState(null);
+  const [selectedDayKey, setSelectedDayKey] = useState(getLocalDateString());
 
-  // Maps the outreach log into a date-based object for the calendar dots
+  // Logic: Map outreach to date keys
   const dailyHistory = useMemo(() => {
     const history = {};
     outreachLog.forEach(entry => {
       const key = getLocalDateString(new Date(entry.ts));
       if (!history[key]) history[key] = { job: 0, build_no_demo: 0, build_demo: 0 };
-      
       if (entry.tplKey === 'job') history[key].job++;
       else if (entry.tplKey === 'build_no_demo') history[key].build_no_demo++;
       else if (entry.tplKey === 'build_demo') history[key].build_demo++;
@@ -26,167 +24,181 @@ export default function OutreachCalendar({ isOpen, onClose, outreachLog = [], on
     return history;
   }, [outreachLog]);
 
-  // Filters individual entries for the specific day you click on
+  // Logic: Filter for Selected Day
   const selectedDayEntries = useMemo(() => {
-    if (!selectedDayKey) return [];
     return outreachLog.filter(entry => getLocalDateString(new Date(entry.ts)) === selectedDayKey);
   }, [selectedDayKey, outreachLog]);
 
-  const allTime = useMemo(() => {
-    let tJob = 0, tBuild = 0, tBuildPlus = 0;
+  // Logic: RECENTLY CHANGED - Monthly Performance Calculation
+  const monthlyStats = useMemo(() => {
+    const month = currentDate.getMonth();
+    const year = currentDate.getFullYear();
+    
+    let job = 0, build = 0, buildPlus = 0;
+    
     outreachLog.forEach(e => {
-      if (e.tplKey === 'job') tJob++;
-      else if (e.tplKey === 'build_no_demo') tBuild++;
-      else if (e.tplKey === 'build_demo') tBuildPlus++;
+      const d = new Date(e.ts);
+      if (d.getMonth() === month && d.getFullYear() === year) {
+        if (e.tplKey === 'job') job++;
+        else if (e.tplKey === 'build_no_demo') build++;
+        else if (e.tplKey === 'build_demo') buildPlus++;
+      }
     });
-    return { job: tJob, build: tBuild, buildPlus: tBuildPlus, total: outreachLog.length };
-  }, [outreachLog]);
+    
+    return { job, build, buildPlus, total: job + build + buildPlus };
+  }, [outreachLog, currentDate]);
 
+  // Calendar Helpers
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
 
   const changeMonth = (offset) => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1));
-    setSelectedDayKey(null);
   };
 
   if (!isOpen) return null;
 
-  const localTodayStr = getLocalDateString(new Date());
-
   return (
     <div 
-      id="cal-modal-backdrop" 
-      // RECENTLY CHANGED: Set z-[9999] to ensure it is above all layout elements
-      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[999999] flex justify-end transition-all" 
-      onClick={(e) => e.target.id === 'cal-modal-backdrop' && onClose()}
+      className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[9999] flex justify-end animate-in fade-in duration-300"
+      onClick={(e) => e.target.id === 'backdrop' && onClose()}
+      id="backdrop"
     >
-      <div 
-        id="cal-modal" 
-        // RECENTLY CHANGED: Added slide-in animation and high-depth shadow
-        className="bg-white h-full max-w-md w-full shadow-[-10px_0_50px_-15px_rgba(0,0,0,0.3)] flex flex-col animate-slide-in-right" 
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
-          <div>
-            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Outreach Calendar</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">History Management</p>
-          </div>
-          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
-
-        <div className="p-5 flex-1 overflow-y-auto">
-          <div className="flex items-center justify-between mb-4 bg-slate-50 p-2 rounded-xl border border-slate-100">
-            <button onClick={() => changeMonth(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-primary transition-all">
-              <span className="material-symbols-outlined">chevron_left</span>
+      <div className="w-full max-w-md bg-white h-screen shadow-2xl flex flex-col border-l border-slate-200 animate-slide-in-right">
+        {/* Header */}
+        <header className="p-6 border-b border-slate-100">
+          <div className="flex items-center justify-between mb-1">
+            <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">calendar_month</span>
+              Outreach Calendar
+            </h1>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <span className="material-symbols-outlined">close</span>
             </button>
-            <span className="text-sm font-black text-slate-800 uppercase tracking-tighter">
+          </div>
+          <p className="text-sm font-medium text-slate-500">History Management</p>
+        </header>
+
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {/* Month Navigation */}
+          <div className="px-6 pt-6 flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-800">
               {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-            </span>
-            <button onClick={() => changeMonth(1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-primary transition-all">
-              <span className="material-symbols-outlined">chevron_right</span>
-            </button>
+            </h2>
+            <div className="flex gap-1">
+              <button onClick={() => changeMonth(-1)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+                <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+              </button>
+              <button onClick={() => changeMonth(1)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
+                <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-7 mb-2 text-center text-[9px] font-black text-slate-400 uppercase tracking-widest">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
-          </div>
-
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`prev-${i}`} className="h-11" />)}
-            
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const day = i + 1;
-              const loopDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-              const key = getLocalDateString(loopDate);
-              const data = dailyHistory[key];
-              const isToday = key === localTodayStr;
-
-              return (
-                <div 
-                  key={key} 
-                  className={`relative h-11 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all border-2 
-                    ${isToday ? 'border-primary/20 bg-primary/5' : 'border-transparent hover:bg-slate-50'} 
-                    ${selectedDayKey === key ? 'border-primary bg-primary/5 shadow-sm' : ''}`}
-                  onClick={() => setSelectedDayKey(key)}
-                >
-                  <span className={`text-xs font-black ${isToday ? 'text-primary' : 'text-slate-700'}`}>{day}</span>
-                  {data && (
-                    <div className="flex gap-0.5 mt-0.5 absolute bottom-1.5">
-                      {data.job > 0 && <span className="w-1 h-1 rounded-full bg-emerald-500" />}
-                      {data.build_no_demo > 0 && <span className="w-1 h-1 rounded-full bg-primary" />}
-                      {data.build_demo > 0 && <span className="w-1 h-1 rounded-full bg-blue-500" />}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {selectedDayKey && (
-            <div className="mt-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="flex items-center justify-between mb-4 px-1">
-                <h3 className="text-xs font-black text-slate-800 uppercase tracking-tight">
-                  {new Date(selectedDayKey).toLocaleDateString('default', { month: 'short', day: 'numeric' })} Activity
-                </h3>
-                <span className="text-[9px] font-black bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase">
-                  {selectedDayEntries.length} Sent
-                </span>
-              </div>
+          {/* Calendar Grid */}
+          <div className="px-6 mb-8">
+            <div className="grid grid-cols-7 mb-2">
+              {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
+                <div key={day} className="text-center text-[10px] font-bold text-slate-400 py-2">{day}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-px bg-slate-100 rounded-lg overflow-hidden border border-slate-100">
+              {/* Empty slots for start of month */}
+              {Array.from({ length: firstDayOfMonth }).map((_, i) => (
+                <div key={`empty-${i}`} className="aspect-square bg-white" />
+              ))}
               
-              <div className="space-y-2">
-                {selectedDayEntries.length > 0 ? selectedDayEntries.map((entry) => (
-                  <div key={entry.ts} className="group flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 hover:border-primary/20 hover:shadow-sm transition-all">
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xs font-bold text-slate-800 truncate">{entry.name}</span>
-                      <span className={`text-[9px] font-black uppercase tracking-widest mt-0.5 
-                        ${entry.tplKey === 'job' ? 'text-emerald-500' : entry.tplKey === 'build_no_demo' ? 'text-primary' : 'text-blue-500'}`}>
-                        {entry.tplKey.replace(/_/g, ' ')}
-                      </span>
-                    </div>
-                    <button 
-                      onClick={() => onDeleteEntry(entry.ts)}
-                      className="opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                    >
-                      <span className="material-symbols-outlined !text-[18px]">delete</span>
-                    </button>
-                  </div>
-                )) : (
-                  <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase italic">Empty Log</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+              {/* Actual Days */}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1;
+                const dateObj = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+                const key = getLocalDateString(dateObj);
+                const isSelected = selectedDayKey === key;
+                const data = dailyHistory[key];
 
-        <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 text-center">Global Performance</p>
-            <div className="grid grid-cols-4 gap-2">
-              <div className="text-center border-r border-slate-100 last:border-0">
-                <span className="block text-lg font-black text-slate-900">{allTime.total}</span>
-                <span className="text-[8px] uppercase font-bold text-slate-400">Total</span>
-              </div>
-              <div className="text-center border-r border-slate-100 last:border-0">
-                <span className="block text-lg font-black text-emerald-500">{allTime.job}</span>
-                <span className="text-[8px] uppercase font-bold text-slate-400">Job</span>
-              </div>
-              <div className="text-center border-r border-slate-100 last:border-0">
-                <span className="block text-lg font-black text-primary">{allTime.build}</span>
-                <span className="text-[8px] uppercase font-bold text-slate-400">Build</span>
-              </div>
-              <div className="text-center">
-                <span className="block text-lg font-black text-blue-500">{allTime.buildPlus}</span>
-                <span className="text-[8px] uppercase font-bold text-slate-400">B+</span>
-              </div>
+                return (
+                  <button 
+                    key={key}
+                    onClick={() => setSelectedDayKey(key)}
+                    className={`aspect-square flex flex-col items-center justify-center gap-1 transition-colors relative
+                      ${isSelected ? 'bg-blue-50 border-2 border-primary z-10' : 'bg-white hover:bg-slate-50'}`}
+                  >
+                    <span className={`text-sm ${isSelected ? 'font-bold text-primary' : 'font-medium text-slate-600'}`}>
+                      {day}
+                    </span>
+                    <div className="flex gap-0.5">
+                      {data?.job > 0 && <div className="w-1 h-1 rounded-full bg-emerald-500" />}
+                      {data?.build_no_demo > 0 && <div className="w-1 h-1 rounded-full bg-primary" />}
+                      {data?.build_demo > 0 && <div className="w-1 h-1 rounded-full bg-sky-400" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Selected Day Activity */}
+          <div className="px-6 mb-8">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+              Activity for {new Date(selectedDayKey).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            </h3>
+            <div className="space-y-3">
+              {selectedDayEntries.length > 0 ? selectedDayEntries.map((entry) => (
+                <div key={entry.ts} className="flex items-center gap-4 p-4 rounded-lg bg-white border border-slate-100 shadow-sm group">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center 
+                    ${entry.tplKey === 'job' ? 'bg-emerald-100 text-emerald-600' : 
+                      entry.tplKey === 'build_no_demo' ? 'bg-primary/10 text-primary' : 
+                      'bg-sky-100 text-sky-600'}`}>
+                    <span className="material-symbols-outlined">
+                      {entry.tplKey === 'job' ? 'work' : entry.tplKey === 'build_no_demo' ? 'rocket_launch' : 'bolt'}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{entry.name}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight truncate">
+                      {entry.tplKey.replace(/_/g, ' ')}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => onDeleteEntry(entry.ts)}
+                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">delete</span>
+                  </button>
+                </div>
+              )) : (
+                <p className="text-center py-6 text-slate-400 text-xs italic">No activity for this day.</p>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Footer / Monthly Performance */}
+        <footer className="p-6 bg-slate-50 border-t border-slate-100">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+            Global Performance ({currentDate.toLocaleString('default', { month: 'short' })})
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-lg bg-white border border-slate-100">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Total</span>
+              <span className="block text-xl font-bold text-slate-800">{monthlyStats.total}</span>
+            </div>
+            <div className="p-3 rounded-lg bg-white border border-slate-100">
+              <span className="text-[10px] font-bold text-emerald-600 uppercase">Jobs</span>
+              <span className="block text-xl font-bold text-slate-800">{monthlyStats.job}</span>
+            </div>
+            <div className="p-3 rounded-lg bg-white border border-slate-100">
+              <span className="text-[10px] font-bold text-primary uppercase">Builds</span>
+              <span className="block text-xl font-bold text-slate-800">{monthlyStats.build}</span>
+            </div>
+            <div className="p-3 rounded-lg bg-white border border-slate-100">
+              <span className="text-[10px] font-bold text-sky-500 uppercase">Build+</span>
+              <span className="block text-xl font-bold text-slate-800">{monthlyStats.buildPlus}</span>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
-   );
+  );
 }
