@@ -38,6 +38,9 @@ User Observation:
 Write TWO short natural-sounding sentence that feels like a real person noticed something about the business.
 
 Rules:
+- Never criticize the business or sound negative.
+- Do not use words like: shame, bad, poor, problem, issue, mistake, wrong, broken.
+- Keep the tone respectful and neutral.
 - No greetings.
 - No introductions.
 - No selling language like "I can help" or "you should".
@@ -47,7 +50,8 @@ Rules:
 - If many reviews → highlight strong reputation.
 - If rating is low → highlight reputation improvement opportunity.
 - Avoid sounding like AI. Write like a person texting another person. Avoid dashes — instead use , comma
--It should sound like something typed quickly on WhatsApp or email.
+- It should sound like something typed quickly on WhatsApp or email.
+- Do not mention conversions, optimization, or marketing performance.
 
 Examples of good hooks:
 • "I noticed ${leadName} has strong Google reviews but doesn’t seem to have an official website yet."
@@ -59,7 +63,7 @@ Return ONLY the sentence.
 
     const result = await model.generateContent(systemPrompt);
     const response = await result.response;
-    const text = response.text();
+    const text = response.text().replace(/["]/g, "").trim();
 
     return res.status(200).json({ message: text.trim() });
   } catch (error) {
