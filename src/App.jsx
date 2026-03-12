@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import LeadDashboard from './components/LeadDashboard';
+import OutreachCalendar from './components/lead-dashboard/OutreachCalendar';
 import FALLBACK_LEADS from './data/fallback-leads';
 
 const getLocalDateString = (d = new Date()) => {
@@ -20,6 +21,9 @@ export default function App() {
   const [adminKey, setAdminKey] = useState("");
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   
+  // RECENTLY ADDED: Calendar visibility state
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
   const [activeView, setActiveView] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -31,86 +35,57 @@ export default function App() {
     counts: { job: 0, build_no_demo: 0, build_demo: 0 }
   });
 
-  // RECENTLY CHANGED: Fixed dependency array so shortcuts always have access to latest state
+  // Keyboard Shortcuts Logic
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-      
       const key = e.key.toLowerCase();
-
-      if (e.key === 'Escape') { 
-        setSearchQuery(''); 
-        setShowShortcutsHelp(false); 
-        return; 
-      }
-
-      if (e.key === '?') { 
-        e.preventDefault(); 
-        setShowShortcutsHelp(prev => !prev); 
-      }
-      
-      if (key === 'c') { 
-        e.preventDefault(); 
-        setSearchQuery(''); 
-      }
-      
-      if (key === 's') {
-        e.preventDefault();
-        setRangeFilters({ ratingMin: 3.5, ratingMax: 4.5, reviewsMin: 50, reviewsMax: 500 });
-        setPage(1);
-        setActiveView('leads');
-      }
-      
-      if (key === 'r') {
-        e.preventDefault();
-        setRangeFilters({ ratingMin: 0, ratingMax: 5, reviewsMin: 0, reviewsMax: 5000 });
-        setSearchQuery('');
-        setPage(1);
-      }
-      
-      if (key === 'p') {
-        e.preventDefault();
-        const targetPage = prompt("Go to page number:");
-        if (targetPage) {
-          const parsed = parseInt(targetPage, 10);
-          if (!isNaN(parsed) && parsed > 0) {
-            setPage(parsed);
-            setActiveView('leads');
-          }
-        }
-      }
+      if (e.key === 'Escape') { setSearchQuery(''); setShowShortcutsHelp(false); setIsCalendarOpen(false); return; }
+      if (e.key === '?') { e.preventDefault(); setShowShortcutsHelp(prev => !prev); }
+      if (key === 'c') { e.preventDefault(); setSearchQuery(''); }
+      if (key === 's') { e.preventDefault(); setRangeFilters({ ratingMin: 3.5, ratingMax: 4.5, reviewsMin: 50, reviewsMax: 500 }); setPage(1); setActiveView('leads'); }
+      if (key === 'r') { e.preventDefault(); setRangeFilters({ ratingMin: 0, ratingMax: 5, reviewsMin: 0, reviewsMax: 5000 }); setSearchQuery(''); setPage(1); }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeView, searchQuery, page, rangeFilters]); // Added missing dependencies
+  }, [activeView, searchQuery, page, rangeFilters]);
 
   const handleToggleAdmin = async () => {
     if (isAdmin) { 
-        setIsAdmin(false); 
-        setAdminKey(""); 
-        sessionStorage.removeItem('admin_session_key'); 
-        return; 
+        setIsAdmin(false); setAdminKey(""); 
+        sessionStorage.removeItem('admin_session_key'); return; 
     }
     const input = prompt("Enter Admin Security Key:");
     if (!input) return;
     try {
       const res = await fetch(`/api/statuses?auth=${encodeURIComponent(input)}`, { cache: 'no-store' });
       if (res.ok) {
-        setAdminKey(input); 
-        setIsAdmin(true);
+        setAdminKey(input); setIsAdmin(true);
         sessionStorage.setItem('admin_session_key', input);
       } else { alert("Invalid Key."); }
     } catch (err) { alert("Connection error."); }
   };
 
-  useEffect(() => {
-    const savedKey = sessionStorage.getItem('admin_session_key');
-    if (savedKey) {
-      fetch(`/api/statuses?auth=${encodeURIComponent(savedKey)}`)
-        .then(res => { if(res.ok) { setAdminKey(savedKey); setIsAdmin(true); } });
+  // RECENTLY ADDED: Handles deleting an entry from the log and syncing to cloud
+  const handleDeleteEntry = async (timestamp) => {
+    const updatedLog = outreachLog.filter(entry => entry.ts !== timestamp);
+    setOutreachLog(updatedLog);
+    
+    // Also recalculate daily counts if deleted entry was from today
+    const entryDate = getLocalDateString(new Date(timestamp));
+    if (entryDate === dailyData.date) {
+      const entryToDelete = outreachLog.find(e => e.ts === timestamp);
+      const newCounts = { ...dailyData.counts };
+      if (entryToDelete && newCounts[entryToDelete.tplKey] > 0) {
+        newCounts[entryToDelete.tplKey]--;
+        const updatedDaily = { ...dailyData, counts: newCounts };
+        setDailyData(updatedDaily);
+        syncToCloud(leads, updatedDaily, updatedLog, adminKey);
+        return;
+      }
     }
-  }, []);
+    syncToCloud(leads, dailyData, updatedLog, adminKey);
+  };
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -132,13 +107,14 @@ export default function App() {
           if (sData.daily) setDailyData(sData.daily);
         }
       } catch (err) { console.error(err); }
+      
       const baseLeads = (dataMode === 'cloud' && Array.isArray(fetchedCloudLeads) && fetchedCloudLeads.length > 0)
         ? fetchedCloudLeads : FALLBACK_LEADS;
+      
       const mergedLeads = baseLeads.map(l => ({
         ...l, id: String(l.id),
         status: (typeof fetchedStatuses[l.id] === 'object' ? fetchedStatuses[l.id].status : fetchedStatuses[l.id]) || "none",
         replied: (typeof fetchedStatuses[l.id] === 'object' ? !!fetchedStatuses[l.id].replied : false),
-        checked: false
       }));
       setLeads(mergedLeads); setOutreachLog(fetchedOutreach); setIsLoading(false);
       setDataSource(dataMode === 'cloud' ? "Vercel Cloud" : "Local File");
@@ -152,31 +128,39 @@ export default function App() {
       setSyncStatus('syncing');
       const statuses = {};
       updatedLeads.forEach(l => { if(l && l.id) statuses[l.id] = { status: l.status, replied: l.replied }; });
-      const res = await fetch('/api/statuses', {
+      await fetch('/api/statuses', {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           auth: currentKey, statuses, daily: updatedDaily || dailyData,
           outreach: updatedOutreach || outreachLog,
-          history: { [(updatedDaily || dailyData).date]: (updatedDaily || dailyData).counts }
         }),
       });
-      if (res.status === 401) { 
-        setSyncStatus('error'); setIsAdmin(false); setAdminKey(""); 
-        sessionStorage.removeItem('admin_session_key'); return; 
-      }
       setSyncStatus('synced');
     } catch (e) { setSyncStatus('error'); }
   };
 
   return (
-    <LeadDashboard 
-      {...{
-        leads, setLeads, outreachLog, setOutreachLog, dailyData, setDailyData,
-        isLoading, syncStatus, dataMode, setDataMode, dataSource, isAdmin, 
-        adminKey, handleToggleAdmin, syncToCloud, showShortcutsHelp, setShowShortcutsHelp,
-        searchQuery, setSearchQuery, page, setPage, rangeFilters, setRangeFilters,
-        activeView, setActiveView
-      }}
-    />
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+      <LeadDashboard 
+        {...{
+          leads, setLeads, outreachLog, setOutreachLog, dailyData, setDailyData,
+          isLoading, syncStatus, dataMode, setDataMode, dataSource, isAdmin, 
+          adminKey, handleToggleAdmin, syncToCloud, showShortcutsHelp, setShowShortcutsHelp,
+          searchQuery, setSearchQuery, page, setPage, rangeFilters, setRangeFilters,
+          activeView, setActiveView,
+          onOpenCalendar: () =>{ 
+            console.log("Calendar opening triggered!");
+            setIsCalendarOpen(true)
+          } // INJECTED
+        }}
+      />
+
+      <OutreachCalendar 
+        isOpen={isCalendarOpen} 
+        onClose={() => setIsCalendarOpen(false)} 
+        outreachLog={outreachLog}
+        onDeleteEntry={handleDeleteEntry}
+      />
+    </div>
   );
 }

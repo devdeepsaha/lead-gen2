@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-// RECENTLY CHANGED: This helper forces the date to strictly use your local timezone, completely ignoring UTC!
+// This helper forces the date to strictly use your local timezone
 const getLocalDateString = (d = new Date()) => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -16,7 +16,6 @@ export default function OutreachCalendar({ isOpen, onClose, outreachLog = [], on
   const dailyHistory = useMemo(() => {
     const history = {};
     outreachLog.forEach(entry => {
-      // RECENTLY CHANGED: Strictly converting the timestamp to a local date key
       const key = getLocalDateString(new Date(entry.ts));
       if (!history[key]) history[key] = { job: 0, build_no_demo: 0, build_demo: 0 };
       
@@ -53,41 +52,50 @@ export default function OutreachCalendar({ isOpen, onClose, outreachLog = [], on
 
   if (!isOpen) return null;
 
-  // RECENTLY CHANGED: Calculates "Today" purely based on your local browser clock
   const localTodayStr = getLocalDateString(new Date());
 
   return (
-    <div id="cal-modal-backdrop" className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex justify-end" onClick={(e) => e.target.id === 'cal-modal-backdrop' && onClose()}>
-      <div id="cal-modal" className="bg-white h-full max-w-md w-full shadow-2xl flex flex-col animate-slide-in-right" onClick={e => e.stopPropagation()}>
+    <div 
+      id="cal-modal-backdrop" 
+      // RECENTLY CHANGED: Set z-[9999] to ensure it is above all layout elements
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[999999] flex justify-end transition-all" 
+      onClick={(e) => e.target.id === 'cal-modal-backdrop' && onClose()}
+    >
+      <div 
+        id="cal-modal" 
+        // RECENTLY CHANGED: Added slide-in animation and high-depth shadow
+        className="bg-white h-full max-w-md w-full shadow-[-10px_0_50px_-15px_rgba(0,0,0,0.3)] flex flex-col animate-slide-in-right" 
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100 flex-shrink-0">
           <div>
-            <h2 className="text-lg font-black text-slate-900">Outreach Calendar</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Manage your outreach history</p>
+            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Outreach Calendar</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">History Management</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
+          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 transition-colors">
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
 
         <div className="p-5 flex-1 overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <button onClick={() => changeMonth(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-primary/10 text-primary transition-colors">
+          <div className="flex items-center justify-between mb-4 bg-slate-50 p-2 rounded-xl border border-slate-100">
+            <button onClick={() => changeMonth(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-primary transition-all">
               <span className="material-symbols-outlined">chevron_left</span>
             </button>
-            <span className="text-base font-black text-slate-800">
+            <span className="text-sm font-black text-slate-800 uppercase tracking-tighter">
               {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
             </span>
-            <button onClick={() => changeMonth(1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-primary/10 text-primary transition-colors">
+            <button onClick={() => changeMonth(1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white hover:shadow-sm text-primary transition-all">
               <span className="material-symbols-outlined">chevron_right</span>
             </button>
           </div>
 
-          <div className="grid grid-cols-7 mb-1 text-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          <div className="grid grid-cols-7 mb-2 text-center text-[9px] font-black text-slate-400 uppercase tracking-widest">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
           </div>
 
-          <div className="grid grid-cols-7 gap-1.5">
-            {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`prev-${i}`} className="h-10 rounded-lg opacity-0" />)}
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`prev-${i}`} className="h-11" />)}
             
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
@@ -99,15 +107,17 @@ export default function OutreachCalendar({ isOpen, onClose, outreachLog = [], on
               return (
                 <div 
                   key={key} 
-                  className={`relative h-10 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all border ${isToday ? 'border-primary/40 bg-primary/5' : 'border-transparent hover:bg-slate-50'} ${selectedDayKey === key ? 'ring-2 ring-primary border-transparent shadow-sm' : ''}`}
+                  className={`relative h-11 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all border-2 
+                    ${isToday ? 'border-primary/20 bg-primary/5' : 'border-transparent hover:bg-slate-50'} 
+                    ${selectedDayKey === key ? 'border-primary bg-primary/5 shadow-sm' : ''}`}
                   onClick={() => setSelectedDayKey(key)}
                 >
-                  <span className={`text-xs font-bold ${isToday ? 'text-primary' : 'text-slate-700'}`}>{day}</span>
+                  <span className={`text-xs font-black ${isToday ? 'text-primary' : 'text-slate-700'}`}>{day}</span>
                   {data && (
                     <div className="flex gap-0.5 mt-0.5 absolute bottom-1.5">
-                      {data.job > 0 && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#10b981' }} />}
-                      {data.build_no_demo > 0 && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#9855f6' }} />}
-                      {data.build_demo > 0 && <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#3b82f6' }} />}
+                      {data.job > 0 && <span className="w-1 h-1 rounded-full bg-emerald-500" />}
+                      {data.build_no_demo > 0 && <span className="w-1 h-1 rounded-full bg-primary" />}
+                      {data.build_demo > 0 && <span className="w-1 h-1 rounded-full bg-blue-500" />}
                     </div>
                   )}
                 </div>
@@ -116,33 +126,36 @@ export default function OutreachCalendar({ isOpen, onClose, outreachLog = [], on
           </div>
 
           {selectedDayKey && (
-            <div className="mt-6 border-t border-slate-100 pt-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-black text-slate-800">{new Date(selectedDayKey).toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })} Instances</h3>
-                <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{selectedDayEntries.length} sent</span>
+            <div className="mt-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="flex items-center justify-between mb-4 px-1">
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                  {new Date(selectedDayKey).toLocaleDateString('default', { month: 'short', day: 'numeric' })} Activity
+                </h3>
+                <span className="text-[9px] font-black bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase">
+                  {selectedDayEntries.length} Sent
+                </span>
               </div>
               
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="space-y-2">
                 {selectedDayEntries.length > 0 ? selectedDayEntries.map((entry) => (
-                  <div key={entry.ts} className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-colors">
-                    <div className="flex flex-col min-w-0 mr-2">
+                  <div key={entry.ts} className="group flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 hover:border-primary/20 hover:shadow-sm transition-all">
+                    <div className="flex flex-col min-w-0">
                       <span className="text-xs font-bold text-slate-800 truncate">{entry.name}</span>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 ${entry.tplKey === 'job' ? 'text-emerald-500' : entry.tplKey === 'build_no_demo' ? 'text-primary' : 'text-blue-500'}`}>
+                      <span className={`text-[9px] font-black uppercase tracking-widest mt-0.5 
+                        ${entry.tplKey === 'job' ? 'text-emerald-500' : entry.tplKey === 'build_no_demo' ? 'text-primary' : 'text-blue-500'}`}>
                         {entry.tplKey.replace(/_/g, ' ')}
                       </span>
                     </div>
                     <button 
                       onClick={() => onDeleteEntry(entry.ts)}
-                      className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
-                      title="Delete log entry"
+                      className="opacity-0 group-hover:opacity-100 w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>delete</span>
+                      <span className="material-symbols-outlined !text-[18px]">delete</span>
                     </button>
                   </div>
                 )) : (
-                  <div className="flex flex-col items-center justify-center py-8 text-slate-400 bg-slate-50/50 rounded-xl border border-slate-100 border-dashed">
-                    <span className="material-symbols-outlined mb-2 opacity-50 text-3xl">event_busy</span>
-                    <p className="text-xs font-medium">No outreach logged for this day.</p>
+                  <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase italic">Empty Log</p>
                   </div>
                 )}
               </div>
@@ -150,18 +163,30 @@ export default function OutreachCalendar({ isOpen, onClose, outreachLog = [], on
           )}
         </div>
 
-        <div className="px-5 pb-6 pt-4 border-t border-slate-100 flex-shrink-0">
-          <div className="rounded-xl bg-slate-50 p-4 border border-slate-100">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 text-center">All-Time Statistics</p>
-            <div className="flex justify-between px-2">
-              <div className="text-center"><span className="block text-xl font-black text-slate-800 leading-none mb-1">{allTime.total}</span><span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Total</span></div>
-              <div className="text-center"><span className="block text-xl font-black text-emerald-500 leading-none mb-1">{allTime.job}</span><span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Job</span></div>
-              <div className="text-center"><span className="block text-xl font-black text-primary leading-none mb-1">{allTime.build}</span><span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Build</span></div>
-              <div className="text-center"><span className="block text-xl font-black text-blue-500 leading-none mb-1">{allTime.buildPlus}</span><span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Build+</span></div>
+        <div className="p-6 border-t border-slate-100 bg-slate-50/50">
+          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 text-center">Global Performance</p>
+            <div className="grid grid-cols-4 gap-2">
+              <div className="text-center border-r border-slate-100 last:border-0">
+                <span className="block text-lg font-black text-slate-900">{allTime.total}</span>
+                <span className="text-[8px] uppercase font-bold text-slate-400">Total</span>
+              </div>
+              <div className="text-center border-r border-slate-100 last:border-0">
+                <span className="block text-lg font-black text-emerald-500">{allTime.job}</span>
+                <span className="text-[8px] uppercase font-bold text-slate-400">Job</span>
+              </div>
+              <div className="text-center border-r border-slate-100 last:border-0">
+                <span className="block text-lg font-black text-primary">{allTime.build}</span>
+                <span className="text-[8px] uppercase font-bold text-slate-400">Build</span>
+              </div>
+              <div className="text-center">
+                <span className="block text-lg font-black text-blue-500">{allTime.buildPlus}</span>
+                <span className="text-[8px] uppercase font-bold text-slate-400">B+</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  );
+   );
 }

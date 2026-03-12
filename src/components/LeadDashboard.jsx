@@ -3,7 +3,6 @@ import DashboardAnalytics from './DashboardAnalytics';
 import LeadTable from './lead-dashboard/LeadTable';
 import OutreachLog from './OutreachLog';
 import SettingsPanel from './SettingsPanel';
-import OutreachCalendar from './lead-dashboard/OutreachCalendar';
 import DashboardHeader from './layout/DashboardHeader';
 import Sidebar from './layout/Sidebar';
 import MobileNav from './layout/MobileNav';
@@ -14,11 +13,11 @@ export default function LeadDashboard(props) {
     isLoading, syncStatus, dataMode, setDataMode, dataSource, isAdmin, 
     adminKey, handleToggleAdmin, syncToCloud, showShortcutsHelp, setShowShortcutsHelp,
     searchQuery, setSearchQuery, page, setPage, rangeFilters, setRangeFilters,
-    activeView, setActiveView
+    activeView, setActiveView,
+    onOpenCalendar // RECEIVED FROM APP.JSX
   } = props;
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [isCalOpen, setIsCalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('all');
   const [sortType, setSortType] = useState('default');
@@ -33,6 +32,7 @@ export default function LeadDashboard(props) {
     { id: 'settings', icon: 'settings', label: 'Setup' }
   ];
 
+  // Helper logic for updating and syncing
   const handleUpdateLeads = (newLeads) => { setLeads(newLeads); syncToCloud(newLeads, dailyData, outreachLog, adminKey); };
   const handleUpdateDaily = (newDaily) => { setDailyData(newDaily); syncToCloud(leads, newDaily, outreachLog, adminKey); };
   const handleUpdateOutreach = (newOutreach) => { setOutreachLog(newOutreach); syncToCloud(leads, dailyData, newOutreach, adminKey); };
@@ -61,7 +61,6 @@ export default function LeadDashboard(props) {
 
   return (
     <div className="bg-background-light text-slate-900 font-display h-screen flex flex-col overflow-hidden">
-      <OutreachCalendar isOpen={isCalOpen} onClose={() => setIsCalOpen(false)} outreachLog={outreachLog} onDeleteEntry={() => {}} />
       
       {isLoading && (
         <div className="fixed inset-0 bg-white/95 z-[9999] flex flex-col items-center justify-center gap-4 text-slate-500">
@@ -78,8 +77,48 @@ export default function LeadDashboard(props) {
         <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} activeView={activeView} setActiveView={setActiveView} navItems={navItems} />
 
         <main className="flex-1 overflow-y-auto bg-background-light pb-20 lg:pb-0 w-full relative">
-          {activeView === 'dashboard' && <DashboardAnalytics leads={leads} dailyData={dailyData} selectedMapLead={selectedMapLead} dataSource={dataSource} onViewInDirectory={handleViewInDirectory} onOpenCalendar={() => setIsCalOpen(true)} />}
-          {activeView === 'leads' && ( <LeadTable leads={leads} isAdmin={isAdmin} setLeads={handleUpdateLeads} dailyData={dailyData} setDailyData={handleUpdateDaily} outreachLog={outreachLog} setOutreachLog={handleUpdateOutreach} searchQuery={searchQuery} setSearchQuery={setSearchQuery} statusFilter={statusFilter} setStatusFilter={setStatusFilter} catFilter={catFilter} setCatFilter={setCatFilter} sortType={sortType} setSortType={setSortType} page={page} setPage={setPage} perPage={perPage} setPerPage={setPerPage} copyMode={copyMode} setCopyMode={setCopyMode} rangeFilters={rangeFilters} setRangeFilters={setRangeFilters} onLocate={handleLocateOnMap} /> )}
+          
+          {/* RECENTLY CHANGED: Standardized prop usage */}
+          {activeView === 'dashboard' && (
+            <DashboardAnalytics 
+              leads={leads} 
+              dailyData={dailyData} 
+              selectedMapLead={selectedMapLead} 
+              dataSource={dataSource} 
+              onViewInDirectory={handleViewInDirectory} 
+              onOpenCalendar={onOpenCalendar} 
+            />
+          )}
+
+          {activeView === 'leads' && ( 
+            <LeadTable 
+              leads={leads} 
+              isAdmin={isAdmin} 
+              setLeads={handleUpdateLeads} 
+              dailyData={dailyData} 
+              setDailyData={handleUpdateDaily} 
+              outreachLog={outreachLog} 
+              setOutreachLog={handleUpdateOutreach} 
+              searchQuery={searchQuery} 
+              setSearchQuery={setSearchQuery} 
+              statusFilter={statusFilter} 
+              setStatusFilter={setStatusFilter} 
+              catFilter={catFilter} 
+              setCatFilter={setCatFilter} 
+              sortType={sortType} 
+              setSortType={setSortType} 
+              page={page} 
+              setPage={setPage} 
+              perPage={perPage} 
+              setPerPage={setPerPage} 
+              copyMode={copyMode} 
+              setCopyMode={setCopyMode} 
+              rangeFilters={rangeFilters} 
+              setRangeFilters={setRangeFilters} 
+              onLocate={handleLocateOnMap} 
+            /> 
+          )}
+          
           {activeView === 'outreach' && <OutreachLog leads={leads} outreachLog={outreachLog} setOutreachLog={handleUpdateOutreach} />}
           {activeView === 'settings' && <SettingsPanel leads={leads} isAdmin={isAdmin} adminKey={adminKey} setLeads={handleUpdateLeads} dailyData={dailyData} setDailyData={handleUpdateDaily} syncStatus={syncStatus} onForceSync={() => syncToCloud(leads, dailyData, outreachLog, adminKey)} />}
         </main>
@@ -99,32 +138,21 @@ export default function LeadDashboard(props) {
             </div>
             
             <div className="space-y-4 pt-2">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Search Console</span>
-                <div className="flex gap-2">
-                   <kbd className="bg-slate-100 border-b-2 border-slate-300 px-2 py-0.5 rounded text-slate-700 font-mono text-[10px]">C</kbd>
-                   <kbd className="bg-slate-100 border-b-2 border-slate-300 px-2 py-0.5 rounded text-slate-700 font-mono text-[10px]">Esc</kbd>
-                </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500 uppercase tracking-widest">Clear Search</span>
+                <kbd className="bg-slate-100 border-b-2 border-slate-300 px-2 py-0.5 rounded text-slate-700 font-mono">C / Esc</kbd>
               </div>
-              
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Sweet Spot Filter</span>
-                <kbd className="bg-primary/10 border-b-2 border-primary/20 px-2 py-0.5 rounded text-primary font-mono text-[10px]">S</kbd>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500 uppercase tracking-widest">Sweet Spot Filter</span>
+                <kbd className="bg-primary/10 border-b-2 border-primary/20 px-2 py-0.5 rounded text-primary font-mono">S</kbd>
               </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Global Data Reset</span>
-                <kbd className="bg-slate-100 border-b-2 border-slate-300 px-2 py-0.5 rounded text-slate-700 font-mono text-[10px]">R</kbd>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500 uppercase tracking-widest">Reset All</span>
+                <kbd className="bg-slate-100 border-b-2 border-slate-300 px-2 py-0.5 rounded text-slate-700 font-mono">R</kbd>
               </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Jump to Page</span>
-                <kbd className="bg-slate-100 border-b-2 border-slate-300 px-2 py-0.5 rounded text-slate-700 font-mono text-[10px]">P</kbd>
-              </div>
-
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Toggle Help Menu</span>
-                <kbd className="bg-slate-100 border-b-2 border-slate-300 px-2 py-0.5 rounded text-slate-700 font-mono text-[10px]">?</kbd>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-bold text-slate-500 uppercase tracking-widest">Help</span>
+                <kbd className="bg-slate-100 border-b-2 border-slate-300 px-2 py-0.5 rounded text-slate-700 font-mono">?</kbd>
               </div>
             </div>
           </div>

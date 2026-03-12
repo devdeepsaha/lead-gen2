@@ -8,37 +8,8 @@ body {
   min-height: 100dvh;
 }
 /* ── Calendar Modal ── */
-#cal-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(15, 15, 25, 0.45);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s;
-}
-#cal-modal-backdrop.open {
-  opacity: 1;
-  pointer-events: all;
-}
-#cal-modal {
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
-  width: min(680px, 95vw);
-  max-height: 90vh;
-  overflow-y: auto;
-  transform: translateY(16px) scale(0.97);
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  padding: 0;
-}
-#cal-modal-backdrop.open #cal-modal {
-  transform: translateY(0) scale(1);
-}
+/* Removed: old vanilla-JS opacity/pointer-events toggle rules.
+   Visibility is now handled by React's conditional render in OutreachCalendar.jsx */
 .cal-day {
   aspect-ratio: 1;
   border-radius: 10px;
@@ -400,4 +371,18 @@ body {
 @keyframes countRingIn {
   from { transform: scale(0.7); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+/* Ensure this is in your global CSS file */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
