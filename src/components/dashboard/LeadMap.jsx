@@ -3,11 +3,9 @@ import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaf
 import 'leaflet/dist/leaflet.css';
 import MapController from './MapController';
 
-// RECENTLY CHANGED: Added MapResizer to force Leaflet to recalculate its size on mount
 function MapResizer() {
   const map = useMap();
   useEffect(() => {
-    // This fixes the "broken tiles" or "half-gray map" issue
     setTimeout(() => {
       map.invalidateSize();
     }, 250);
@@ -16,8 +14,15 @@ function MapResizer() {
 }
 
 export default function LeadMap({ mappableLeads, selectedMapLead, markerRefs, getStatusColor, onViewInDirectory }) {
-  // Map standard starting position (India/Global center)
   const center = mappableLeads.length > 0 ? [mappableLeads[0].lat, mappableLeads[0].lng] : [20, 77];
+
+  // RECENTLY CHANGED: Sort leads so 'none' (gray) markers are rendered first (bottom layer)
+  // and colored status markers are rendered last (top layer).
+  const sortedLeads = [...mappableLeads].sort((a, b) => {
+    if (a.status === 'none' && b.status !== 'none') return -1;
+    if (a.status !== 'none' && b.status === 'none') return 1;
+    return 0;
+  });
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col mb-4 select-text">
@@ -29,9 +34,6 @@ export default function LeadMap({ mappableLeads, selectedMapLead, markerRefs, ge
         <span className="material-symbols-outlined text-slate-300">public</span>
       </div>
       
-      {/* IMPORTANT: Standard Leaflet needs an explicit height. 
-        The z-index 0 prevents map controls from floating over your navigation headers.
-      */}
       <div className="w-full h-[300px] lg:h-[500px] relative z-0">
         {mappableLeads.length > 0 ? (
           <MapContainer 
@@ -40,27 +42,26 @@ export default function LeadMap({ mappableLeads, selectedMapLead, markerRefs, ge
             scrollWheelZoom={true}
             style={{ height: '100%', width: '100%' }}
           >
-            {/* Base Tile Provider */}
             <TileLayer 
                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
                attribution='&copy; CARTO'
             />
             
-            {/* Logic Components */}
             <MapResizer />
             <MapController selectedLead={selectedMapLead} markerRefs={markerRefs} />
 
-            {mappableLeads.map(l => (
+            {/* Use sortedLeads instead of mappableLeads */}
+            {sortedLeads.map(l => (
               <CircleMarker 
                 key={l.id} 
                 center={[l.lat, l.lng]} 
-                radius={6}
+                radius={l.status === 'none' ? 5 : 7} // RECENTLY CHANGED: Make colored dots slightly larger
                 ref={(r) => { if(r) markerRefs.current[l.id] = r; }} 
                 pathOptions={{ 
                   color: getStatusColor(l.status), 
                   fillColor: getStatusColor(l.status), 
-                  fillOpacity: 0.8, 
-                  weight: 2 
+                  fillOpacity: l.status === 'none' ? 0.4 : 0.9, // RECENTLY CHANGED: Dim gray dots, pop colored ones
+                  weight: l.status === 'none' ? 1 : 2 
                 }}
               >
                 <Popup className="rounded-lg">
