@@ -35,10 +35,9 @@ Context:
 User Observation:
 "${userThought}"
 
-Write ONE short natural-sounding sentence that feels like a real person noticed something about the business.
+Write TWO short natural-sounding sentence that feels like a real person noticed something about the business.
 
 Rules:
-- Maximum 18 words.
 - No greetings.
 - No introductions.
 - No selling language like "I can help" or "you should".
