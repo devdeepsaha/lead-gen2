@@ -43,6 +43,18 @@ export default function App() {
       if (key === 'c') { e.preventDefault(); setSearchQuery(''); }
       if (key === 's') { e.preventDefault(); setRangeFilters({ ratingMin: 3.5, ratingMax: 4.5, reviewsMin: 50, reviewsMax: 500 }); setPage(1); setActiveView('leads'); }
       if (key === 'r') { e.preventDefault(); setRangeFilters({ ratingMin: 0, ratingMax: 5, reviewsMin: 0, reviewsMax: 5000 }); setSearchQuery(''); setPage(1); }
+      
+      if (key === 'p') {
+  e.preventDefault();
+  const targetPage = prompt("Jump to Page:");
+  if (targetPage) {
+    const parsed = parseInt(targetPage, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      setPage(parsed);
+      setActiveView('leads'); // Force switch to Directory view so they see the page change
+    }
+  }
+}
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
