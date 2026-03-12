@@ -113,8 +113,11 @@ Examples of good hooks:
 • "I noticed ${leadName} has strong Google reviews but doesn’t seem to have an official website yet."
 • "Saw ${leadName} has over ${reviews} reviews, that kind of reputation deserves a strong website."
 • "Looks like ${leadName} currently doesn’t have a website, which might make it harder for new customers to find you."
-
-Return ONLY the sentence.
+• "I noticed the hero image on the homepage isn't loading."
+• "Looks like some elements move while the page loads."
+• "I noticed the layout shifts slightly when the page finishes loading."
+• "I noticed the mobile layout stacks a bit tightly."
+  Return ONLY the sentence.
 `;
 
     
