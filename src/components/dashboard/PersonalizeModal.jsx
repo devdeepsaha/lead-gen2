@@ -6,12 +6,26 @@ export default function PersonalizeModal({ isOpen, onClose, onGenerate, lead, st
 
   if (!isOpen) return null;
 
+  // Helper tags based on the logic we want Gemini to follow
+  const QUICK_TAGS = [
+    { label: "⚡ Slow Load", value: "I noticed your site takes about 9 seconds to load, which might be frustrating for guests." },
+    { label: "📱 Not Mobile Friendly", value: "The mobile version of your site is a bit hard to navigate currently." },
+    { label: "❌ No Website", value: "I noticed you don't have a website yet, which is a missed opportunity for bookings." },
+    { label: "🎨 Dated Design", value: "The current design feels a bit dated and doesn't reflect the high quality of your work." },
+    { label: "⭐ High Reviews", value: `You have an amazing reputation with ${lead?.reviews} reviews, but the site doesn't show it off.` }
+  ];
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!thought.trim()) return;
     
     setIsGenerating(true);
-    await onGenerate(thought);
+    // Passing thought AND the extra lead data
+    await onGenerate(thought, {
+      rating: lead?.rating,
+      reviews: lead?.reviews,
+      hasWebsite: !!lead?.website
+    });
     setIsGenerating(false);
     setThought('');
   };
@@ -25,18 +39,42 @@ export default function PersonalizeModal({ isOpen, onClose, onGenerate, lead, st
             <button onClick={onClose} className="material-symbols-outlined text-slate-400 hover:text-slate-600">close</button>
           </div>
           
-          <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Target Lead</p>
-            <p className="text-sm font-bold text-slate-700">{lead?.name} <span className="text-primary mx-1">/</span> {status}</p>
+          {/* Target Info with Ratings & Reviews */}
+          <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Target Lead</p>
+              <p className="text-sm font-bold text-slate-700">{lead?.name} <span className="text-primary mx-1">/</span> {status}</p>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center gap-1 text-orange-500 font-bold text-xs">
+                <span className="material-symbols-outlined !text-[14px]">star</span>
+                {lead?.rating || 'N/A'}
+              </div>
+              <p className="text-[9px] text-slate-400 font-bold uppercase">{lead?.reviews || 0} Reviews</p>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit}>
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">What did you notice about their site?</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Quick Tags (Helper)</label>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {QUICK_TAGS.map((tag) => (
+                <button
+                  key={tag.label}
+                  type="button"
+                  onClick={() => setThought(tag.value)}
+                  className="text-[10px] font-bold py-1.5 px-3 rounded-lg border border-slate-200 bg-white hover:border-primary/50 hover:text-primary transition-all shadow-sm active:scale-95"
+                >
+                  {tag.label}
+                </button>
+              ))}
+            </div>
+
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Detailed Observation</label>
             <textarea
               autoFocus
               value={thought}
               onChange={(e) => setThought(e.target.value)}
-              placeholder="e.g., Their hero section is minimalist, or they have a great blog on SEO..."
+              placeholder="Select a tag above or type your own observation..."
               className="w-full h-24 p-4 rounded-xl border-2 border-slate-100 focus:border-primary/30 outline-none text-sm transition-all resize-none"
             />
             
@@ -58,13 +96,13 @@ export default function PersonalizeModal({ isOpen, onClose, onGenerate, lead, st
                 ) : (
                   <span className="material-symbols-outlined" style={{fontSize: '18px'}}>magic_button</span>
                 )}
-                {isGenerating ? 'Generating...' : 'Generate & Copy'}
+                {isGenerating ? 'Analyzing...' : 'Generate & Copy'}
               </button>
             </div>
           </form>
         </div>
-        <div className="bg-slate-50 px-6 py-3 border-t border-slate-100">
-          <p className="text-[9px] text-slate-400 font-bold uppercase text-center tracking-tighter">Powered by Gemini 3.1 Flash Lite</p>
+        <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 text-center">
+          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">Powered by Gemini 3.1 Flash Lite</p>
         </div>
       </div>
     </div>

@@ -3,7 +3,7 @@ import LeadTableControls from './LeadTableControls';
 import LeadTableDesktop from './LeadTableDesktop';
 import LeadTableMobile from './LeadTableMobile';
 import LeadTablePagination from './LeadTablePagination';
-import PersonalizeModal from '../dashboard/PersonalizeModal'; // Ensure correct path
+import PersonalizeModal from '../dashboard/PersonalizeModal'; 
 import { TEMPLATES } from '../../data/templates';
 
 const getLocalDateString = (d = new Date()) => {
@@ -103,7 +103,6 @@ export default function LeadTable({
     updateLead(id, { status: finalStatus });
   };
 
-  // RECENTLY CHANGED: Centralized logging for both AI and standard copy
   const logOutreachInternal = (lead) => {
     if (!isAdmin) return;
     const actualTplKey = lead.status === 'build' ? 'build_no_demo' : lead.status === 'build_plus' ? 'build_demo' : lead.status;
@@ -116,52 +115,55 @@ export default function LeadTable({
     setDailyData({ ...dailyData, date: today, counts: newCounts });
   };
 
-  // RECENTLY CHANGED: Updated to trigger the Personalization Modal
   const handleCopyTemplate = (lead) => {
     const tpl = TEMPLATES[copyMode][lead.status];
     if (!tpl) return showToast("Tag lead as Job, Build, or Build+ first");
-    
     setPersonalizeModal({ isOpen: true, lead: lead });
   };
 
-  // RECENTLY ADDED: Calls the Vercel Serverless Function to get AI personalization
-  const handleGenerateSmartOutreach = async (userThought) => {
-  const { lead } = personalizeModal;
-  const tpl = TEMPLATES[copyMode][lead.status];
-  const authKey = sessionStorage.getItem('admin_session_key') || import.meta.env.VITE_ADMIN_KEY;
+  // RECENTLY UPDATED: Now accepts thought AND extraData from the modal
+  const handleGenerateSmartOutreach = async (userThought, extraData = {}) => {
+    const { lead } = personalizeModal;
+    const tpl = TEMPLATES[copyMode][lead.status];
+    const authKey = sessionStorage.getItem('admin_session_key') || import.meta.env.VITE_ADMIN_KEY;
 
-  try {
-    const res = await fetch('/api/generate-outreach', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        leadName: lead.name,
-        category: lead.category,
-        status: lead.status,
-        userThought: userThought,
-        auth: authKey
-      })
-    });
+    try {
+      const res = await fetch('/api/generate-outreach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadName: lead.name,
+          category: lead.category,
+          status: lead.status,
+          userThought: userThought,
+          auth: authKey,
+          // PASSING DATA FOR BETTER AI CONTEXT
+          rating: extraData.rating,
+          reviews: extraData.reviews,
+          hasWebsite: extraData.hasWebsite
+        })
+      });
 
-    const data = await res.json();
-    if (res.ok) {
-      const baseTemplate = tpl.build(lead.name);
-      
-      // RECENTLY CHANGED: Replace the placeholder with the AI message
-      const finalMsg = baseTemplate.replace('[AI_HOOK]', data.message);
+      const data = await res.json();
+      if (res.ok) {
+        const baseTemplate = tpl.build(lead.name);
+        
+        // RECENTLY CHANGED: Inject AI content into the [AI_HOOK] placeholder
+        const finalMsg = baseTemplate.replace('[AI_HOOK]', data.message);
 
-      await navigator.clipboard.writeText(finalMsg);
-      logOutreachInternal(lead);
-      showToast("✨ Smart Message Copied!");
-    } else {
-      showToast("Error: " + data.message);
+        await navigator.clipboard.writeText(finalMsg);
+        logOutreachInternal(lead);
+        showToast("✨ Smart Message Copied!");
+      } else {
+        showToast("Error: " + data.message);
+      }
+    } catch (err) {
+      console.error("Outreach Error:", err);
+      showToast("AI Sync Failed");
+    } finally {
+      setPersonalizeModal({ isOpen: false, lead: null });
     }
-  } catch (err) {
-    showToast("AI Sync Failed");
-  } finally {
-    setPersonalizeModal({ isOpen: false, lead: null });
-  }
-};
+  };
 
   const handleEmailCopy = (email) => {
     navigator.clipboard.writeText(email).then(() => showToast("Copied " + email));
@@ -199,7 +201,6 @@ export default function LeadTable({
         filteredCount={filteredLeads.length} perPage={perPage}
       />
 
-      {/* RECENTLY ADDED: Personalize Modal */}
       <PersonalizeModal 
         isOpen={personalizeModal.isOpen}
         lead={personalizeModal.lead}
