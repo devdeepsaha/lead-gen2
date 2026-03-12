@@ -153,7 +153,7 @@ export default function LeadTable({
 
         await navigator.clipboard.writeText(finalMsg);
         logOutreachInternal(lead);
-        showToast("✨ Smart Message Copied!");
+        showToast(" Smart Message Copied!");
       } else {
         showToast("Error: " + data.message);
       }
@@ -170,9 +170,16 @@ export default function LeadTable({
   };
 
   const handlePhoneCopy = (phone) => {
-    if (!phone) return;
-    navigator.clipboard.writeText(phone).then(() => showToast("Copied phone: " + phone));
-  };
+  if (!phone) return;
+
+  // RECENTLY CHANGED: Strip non-digits and take only the last 10 digits
+  const cleanPhone = phone.toString().replace(/\D/g, '').slice(-10);
+
+  navigator.clipboard.writeText(cleanPhone).then(() => {
+    // We show the clean version in the toast so you know it worked
+    showToast("Copied 10-digit phone: " + cleanPhone);
+  });
+};
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative bg-background-light md:bg-white">

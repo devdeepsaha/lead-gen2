@@ -52,6 +52,13 @@ Rules:
 - Avoid sounding like AI. Write like a person texting another person. Avoid dashes — instead use , comma
 - It should sound like something typed quickly on WhatsApp or email.
 - Do not mention conversions, optimization, or marketing performance.
+-Prefer observations about website behaviour over technical metric names.
+-Interpret Lighthouse metrics like this:
+- FCP under 2s → fast
+- LCP under 2.5s → good
+- TBT near 0 → smooth
+- CLS above 0.25 → layout shifts noticeable
+- Speed Index under 4s → fast
 
 Examples of good hooks:
 • "I noticed ${leadName} has strong Google reviews but doesn’t seem to have an official website yet."
