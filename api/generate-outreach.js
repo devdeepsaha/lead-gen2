@@ -47,6 +47,7 @@ Rules:
 - If many reviews → highlight strong reputation.
 - If rating is low → highlight reputation improvement opportunity.
 - Avoid sounding like AI. Write like a person texting another person. Avoid dashes — instead use , comma
+-It should sound like something typed quickly on WhatsApp or email.
 
 Examples of good hooks:
 • "I noticed ${leadName} has strong Google reviews but doesn’t seem to have an official website yet."
