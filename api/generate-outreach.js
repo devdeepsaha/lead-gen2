@@ -40,7 +40,7 @@ Context:
 User Observation:
 "${userThought}"
 
-Write TWO short natural-sounding sentence that feels like a real person noticed something about the business.
+Write THREE short natural-sounding sentence that feels like a real person noticed something about the business.
 
 Rules:
 - Never criticize the business or sound negative.
@@ -86,6 +86,17 @@ Use neutral wording like:
 "Seems like..."
 
 Do not guess things that are not visible in the screenshot.
+
+Observation Priority:
+
+Use signals in this order of importance:
+1. Visual issues visible in screenshots
+2. Lighthouse performance signals
+3. User observation text
+4. Google reviews / reputation
+5. Website presence
+
+Prefer mentioning the most noticeable observation first.
 
 Examples of good hooks:
 • "I noticed ${leadName} has strong Google reviews but doesn’t seem to have an official website yet."
