@@ -20,8 +20,6 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminKey, setAdminKey] = useState("");
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
-  
-  // RECENTLY ADDED: Calendar visibility state
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const [activeView, setActiveView] = useState('dashboard');
@@ -35,7 +33,7 @@ export default function App() {
     counts: { job: 0, build_no_demo: 0, build_demo: 0 }
   });
 
-  // Keyboard Shortcuts Logic
+  // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -50,10 +48,11 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeView, searchQuery, page, rangeFilters]);
 
+  // Admin Auth Logic
   const handleToggleAdmin = async () => {
     if (isAdmin) { 
-        setIsAdmin(false); setAdminKey(""); 
-        sessionStorage.removeItem('admin_session_key'); return; 
+      setIsAdmin(false); setAdminKey(""); 
+      sessionStorage.removeItem('admin_session_key'); return; 
     }
     const input = prompt("Enter Admin Security Key:");
     if (!input) return;
@@ -66,12 +65,41 @@ export default function App() {
     } catch (err) { alert("Connection error."); }
   };
 
-  // RECENTLY ADDED: Handles deleting an entry from the log and syncing to cloud
+  // RECENTLY CHANGED: Persist admin session on refresh
+  useEffect(() => {
+    const savedKey = sessionStorage.getItem('admin_session_key');
+    if (savedKey) {
+      setAdminKey(savedKey);
+      setIsAdmin(true);
+    }
+  }, []);
+
+  // Sync Logic - CRITICAL FIX: Ensure it always uses the freshest data
+  const syncToCloud = async (updatedLeads, updatedDaily, updatedOutreach, currentKey) => {
+    try {
+      setSyncStatus('syncing');
+      const statuses = {};
+      // Use provided updatedLeads OR fallback to current state
+      const leadsToSync = updatedLeads || leads;
+      leadsToSync.forEach(l => { if(l && l.id) statuses[l.id] = { status: l.status, replied: l.replied }; });
+
+      await fetch('/api/statuses', {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auth: currentKey || adminKey, 
+          statuses, 
+          daily: updatedDaily || dailyData,
+          outreach: updatedOutreach || outreachLog,
+        }),
+      });
+      setSyncStatus('synced');
+    } catch (e) { setSyncStatus('error'); }
+  };
+
   const handleDeleteEntry = async (timestamp) => {
     const updatedLog = outreachLog.filter(entry => entry.ts !== timestamp);
     setOutreachLog(updatedLog);
     
-    // Also recalculate daily counts if deleted entry was from today
     const entryDate = getLocalDateString(new Date(timestamp));
     if (entryDate === dailyData.date) {
       const entryToDelete = outreachLog.find(e => e.ts === timestamp);
@@ -80,7 +108,7 @@ export default function App() {
         newCounts[entryToDelete.tplKey]--;
         const updatedDaily = { ...dailyData, counts: newCounts };
         setDailyData(updatedDaily);
-        syncToCloud(leads, updatedDaily, updatedLog, adminKey);
+        syncToCloud(leads, updatedDaily, updatedLog, adminKey); // SYNC EVERYTHING
         return;
       }
     }
@@ -122,25 +150,8 @@ export default function App() {
     initializeApp();
   }, [dataMode]);
 
-  const syncToCloud = async (updatedLeads, updatedDaily, updatedOutreach, currentKey) => {
-    try {
-      if (!Array.isArray(updatedLeads)) return;
-      setSyncStatus('syncing');
-      const statuses = {};
-      updatedLeads.forEach(l => { if(l && l.id) statuses[l.id] = { status: l.status, replied: l.replied }; });
-      await fetch('/api/statuses', {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          auth: currentKey, statuses, daily: updatedDaily || dailyData,
-          outreach: updatedOutreach || outreachLog,
-        }),
-      });
-      setSyncStatus('synced');
-    } catch (e) { setSyncStatus('error'); }
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 overflow-x-hidden">
       <LeadDashboard 
         {...{
           leads, setLeads, outreachLog, setOutreachLog, dailyData, setDailyData,
@@ -148,10 +159,7 @@ export default function App() {
           adminKey, handleToggleAdmin, syncToCloud, showShortcutsHelp, setShowShortcutsHelp,
           searchQuery, setSearchQuery, page, setPage, rangeFilters, setRangeFilters,
           activeView, setActiveView,
-          onOpenCalendar: () =>{ 
-            console.log("Calendar opening triggered!");
-            setIsCalendarOpen(true)
-          } // INJECTED
+          onOpenCalendar: () => setIsCalendarOpen(true)
         }}
       />
 
