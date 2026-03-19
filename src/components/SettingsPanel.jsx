@@ -1,14 +1,25 @@
 import React, { useState, useMemo } from 'react';
 
-export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", setLeads, dailyData, setDailyData, syncStatus, onForceSync }) {
+export default function SettingsPanel({ 
+  leads, 
+  isAdmin = false, 
+  adminKey = "", 
+  setLeads, 
+  dailyData, 
+  setDailyData, 
+  onForceSync 
+}) {
   const [goalInput, setGoalInput] = useState(dailyData.goal || 10);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState({ msg: '', type: '' });
 
   const stats = useMemo(() => {
-    const tagged = leads.filter(l => ['job', 'build', 'build_plus'].includes(l.status)).length;
-    const categories = new Set(leads.map(l => l.category)).size;
+    // RECENTLY CHANGED: Updated to include both old and new status types for the counter
+    const tagged = leads.filter(l => 
+      ['message', 'call', 'job', 'build', 'build_plus', 'freelance'].includes(l.status)
+    ).length;
     
+    const categories = new Set(leads.map(l => l.category)).size;
     const payloadString = JSON.stringify(leads);
     const bytes = new Blob([payloadString]).size;
     const kb = bytes / 1024;
@@ -20,7 +31,56 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     return { total: leads.length, tagged, categories, sizeDisplay, percentOfLimit, kb };
   }, [leads]);
 
-  // RECENTLY CHANGED: This function pushes both Base leads (with coordinates) and statuses
+  // RECENTLY ADDED: Master Recovery Function to merge files and preserve statuses
+  const handleMasterRecovery = (file) => {
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode.");
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        setUploadStatus({ msg: "Processing Recovery...", type: "loading" });
+        const content = e.target.result;
+        let incomingLeads = [];
+
+        if (file.name.endsWith('.json')) {
+          const raw = JSON.parse(content);
+          incomingLeads = Array.isArray(raw) ? raw : Object.entries(raw).map(([id, val]) => ({ id, ...val }));
+        } else {
+          incomingLeads = parseCSV(content);
+        }
+
+        const masterMap = new Map();
+        leads.forEach(l => masterMap.set(l.name.toLowerCase().trim(), l));
+
+        incomingLeads.forEach(p => {
+          const key = p.name ? p.name.toLowerCase().trim() : p.id;
+          if (masterMap.has(key)) {
+            const existing = masterMap.get(key);
+            // Priority: Keep any existing non-none status, otherwise take from file
+            if (p.status && p.status !== 'none' && (!existing.status || existing.status === 'none')) {
+               masterMap.set(key, { ...existing, ...p });
+            }
+          } else {
+            masterMap.set(key, p);
+          }
+        });
+
+        const recovered = Array.from(masterMap.values());
+        setLeads(recovered);
+
+        const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(recovered, null, 2)};\n\nexport default FALLBACK_LEADS;`;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([fileContent], { type: 'application/javascript' }));
+        a.download = 'recovered-leads-with-tags.js';
+        a.click();
+
+        setUploadStatus({ msg: `✅ Successfully merged and downloaded!`, type: 'success' });
+      } catch (err) {
+        setUploadStatus({ msg: "❌ Recovery failed.", type: "error" });
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleDeepSync = async () => {
     if (!isAdmin) return alert("🔒 Unlock Admin Mode to sync.");
     setUploadStatus({ msg: "Pushing all data to Vercel KV...", type: "loading" });
@@ -31,10 +91,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         body: JSON.stringify(leads)
       });
       if (!resLeads.ok) throw new Error("Failed to sync base leads.");
-      
-      // Trigger the status/daily data sync
       await onForceSync();
-      
       setUploadStatus({ msg: "✅ Deep Cloud Sync Complete!", type: "success" });
       setTimeout(() => setUploadStatus({ msg: '', type: '' }), 4000);
     } catch (err) {
@@ -50,7 +107,6 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
     a.href = URL.createObjectURL(new Blob([JSON.stringify(map, null, 2)], { type: "application/json" }));
     a.download = "leadflow_statuses_backup.json";
     a.click();
-    URL.revokeObjectURL(a.href);
   };
 
   const parseCSVRow = (line) => {
@@ -91,7 +147,15 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       rating: idx(["Rating", "rating"]),
       reviews: idx(["Reviews", "reviews", "review_count"]),
       lat: idx(["Latitude", "lat", "latitude"]), 
-      lng: idx(["Longitude", "lng", "lon", "longitude"]), 
+      lng: idx(["Longitude", "lng", "lon", "longitude"]),
+      status: idx(["Status", "status"]),
+      monday: idx(["Monday Hours", "monday"]),
+      tuesday: idx(["Tuesday Hours", "tuesday"]),
+      wednesday: idx(["Wednesday Hours", "wednesday"]),
+      thursday: idx(["Thursday Hours", "thursday"]),
+      friday: idx(["Friday Hours", "friday"]),
+      saturday: idx(["Saturday Hours", "saturday"]),
+      sunday: idx(["Sunday Hours", "sunday"]),
     };
     
     const results = [];
@@ -115,7 +179,14 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         reviews: parseInt(g(col.reviews)) || null,
         lat: isNaN(latVal) ? null : latVal, 
         lng: isNaN(lngVal) ? null : lngVal, 
-        status: 'none',
+        monday: g(col.monday),
+        tuesday: g(col.tuesday),
+        wednesday: g(col.wednesday),
+        thursday: g(col.thursday),
+        friday: g(col.friday),
+        saturday: g(col.saturday),
+        sunday: g(col.sunday),
+        status: g(col.status) || 'none',
         replied: false,
         checked: false
       });
@@ -124,7 +195,7 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
   };
 
   const handleFile = (file) => {
-    if (!isAdmin) return setUploadStatus({ msg: '🔒 Unlock Admin Mode to upload CSV files.', type: 'error' });
+    if (!isAdmin) return setUploadStatus({ msg: '🔒 Unlock Admin Mode.', type: 'error' });
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
@@ -135,20 +206,15 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           if (existingMap.has(p.id)) {
             const ex = existingMap.get(p.id);
             existingMap.set(p.id, { 
-              ...ex, 
-              ...p, 
-              lat: p.lat || ex.lat, 
-              lng: p.lng || ex.lng,
-              status: ex.status, 
+              ...ex, ...p, 
+              status: p.status !== 'none' ? p.status : ex.status,
               replied: ex.replied 
             });
-          } else { 
-            existingMap.set(p.id, p); 
-          }
+          } else { existingMap.set(p.id, p); }
         });
         
         setLeads(Array.from(existingMap.values()));
-        setUploadStatus({ msg: `✅ Leads staged with coordinates. Use 'Force Cloud Sync' to save!`, type: 'success' });
+        setUploadStatus({ msg: `✅ Leads staged. Use 'Force Cloud Sync' to save!`, type: 'success' });
       } catch (err) { setUploadStatus({ msg: `❌ Upload failed.`, type: 'error' }); }
     };
     reader.readAsText(file, "utf-8");
@@ -162,23 +228,19 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
       const key = lead.name.toLowerCase().trim();
       if (uniqueMap.has(key)) {
         const existing = uniqueMap.get(key);
-        uniqueMap.set(key, { ...existing, phone: existing.phone || lead.phone, email: existing.email || lead.email, lat: existing.lat || lead.lat, lng: existing.lng || lead.lng });
+        uniqueMap.set(key, { ...existing, phone: existing.phone || lead.phone, email: existing.email || lead.email });
       } else { uniqueMap.set(key, { ...lead }); }
     });
     const cleanedLeads = Array.from(uniqueMap.values());
     setLeads(cleanedLeads);
     try {
       await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cleanedLeads) });
-      const fileContent = `const FALLBACK_LEADS = ${JSON.stringify(cleanedLeads, null, 2)};\n\nexport default FALLBACK_LEADS;`;
-      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([fileContent], { type: 'application/javascript' }));
-      a.download = 'fallback-leads-cleaned.js'; a.click();
       setUploadStatus({ msg: `✅ Cleaned and Cloud updated!`, type: 'success' });
     } catch (err) { setUploadStatus({ msg: `❌ Cloud sync error.`, type: 'error' }); }
   };
 
-  // RECENTLY RESTORED: Daily Goal management functions
   const saveDailyGoal = () => {
-    if (!isAdmin) return alert("🔒 Unlock Admin Mode to change the daily goal.");
+    if (!isAdmin) return alert("🔒 Unlock Admin Mode.");
     const val = Math.max(1, Math.min(200, goalInput));
     setDailyData({ ...dailyData, goal: val });
     alert(`🎯 Goal updated to ${val} per day.`);
@@ -205,23 +267,34 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
         <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
           Settings {!isAdmin && <span className="material-symbols-outlined text-slate-300 text-xl">lock</span>}
         </h1>
-        <p className="text-sm text-slate-500">Manage leads data, goals, and cloud backups.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl">
         
-        {/* CSV Upload Section with Restored Dashed UI */}
+        {/* RECENTLY ADDED: Master Recovery UI Section */}
+        <div className="md:col-span-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl">
+           <div className="flex items-center gap-3 mb-4">
+             <span className="material-symbols-outlined text-3xl">history_toggle_off</span>
+             <div>
+               <h3 className="font-bold text-lg">Master Tag Recovery</h3>
+               <p className="text-blue-100 text-xs">Merge old CSV/JSON files and download a clean tagged JS file.</p>
+             </div>
+           </div>
+           <input type="file" id="master-recovery-input" className="hidden" accept=".csv,.json" onChange={(e) => handleMasterRecovery(e.target.files[0])} />
+           <button onClick={() => document.getElementById('master-recovery-input').click()} className="w-full py-3 bg-white text-blue-600 font-bold rounded-xl shadow-lg hover:bg-blue-50 transition-all active:scale-95">
+             Select File to Recover Tags
+           </button>
+        </div>
+
         <div className={`md:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-sm transition-all ${!isAdmin ? 'opacity-60' : ''}`}>
           <div className="flex items-start justify-between mb-3">
             <div>
               <h3 className="font-bold text-sm">Add or Update Leads from CSV</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Enrich leads with coordinates or metadata. Manual tags are kept.</p>
+              <p className="text-xs text-slate-400 mt-0.5">Enrich leads with coordinates and timings.</p>
             </div>
-            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-1 rounded-full uppercase tracking-wide">Premium Staged Upload</span>
           </div>
-          
           <div 
-            className={`border-2 rounded-xl p-8 text-center transition-all ${!isAdmin ? 'cursor-not-allowed bg-slate-50 border-slate-200' : isDragging ? 'border-primary bg-primary/5 cursor-pointer' : 'border-primary/30 hover:border-primary hover:bg-primary/5 cursor-pointer'}`}
+            className={`border-2 rounded-xl p-8 text-center transition-all ${!isAdmin ? 'bg-slate-50 border-slate-200' : isDragging ? 'border-primary bg-primary/5' : 'border-primary/30 hover:border-primary hover:bg-primary/5 cursor-pointer'}`}
             style={{ borderStyle: 'dashed' }}
             onClick={() => isAdmin && document.getElementById('csv-file-input').click()}
             onDragOver={e => { e.preventDefault(); if (isAdmin) setIsDragging(true); }}
@@ -229,47 +302,32 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
             onDrop={e => { e.preventDefault(); setIsDragging(false); if (isAdmin) handleFile(e.dataTransfer.files[0]); }}
           >
             <span className="material-symbols-outlined block mb-2 text-primary/40" style={{ fontSize: '36px' }}>{isAdmin ? 'upload_file' : 'lock'}</span>
-            <p className="text-sm font-semibold text-slate-500">Drop CSV here or <span className="text-primary font-bold">click to browse</span></p>
+            <p className="text-sm font-semibold text-slate-500">Drop CSV here or click to browse</p>
             <input type="file" id="csv-file-input" accept=".csv" className="hidden" onChange={(e) => handleFile(e.target.files[0])} disabled={!isAdmin} />
           </div>
-          
           {uploadStatus.msg && (
-            <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-600 border border-slate-200'}`}>
+            <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${uploadStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50 text-slate-600'}`}>
               {uploadStatus.msg}
             </div>
           )}
         </div>
 
-        {/* RECENTLY RESTORED: Daily Goal & Outreach Settings */}
         <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
           <h3 className="font-bold text-sm mb-3">Target & Goals</h3>
-          <div className="flex flex-col gap-4">
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Daily Outreach Goal</label>
-              <div className="flex gap-2">
-                <input 
-                  type="number" 
-                  value={goalInput} 
-                  onChange={(e) => setGoalInput(e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-primary/40"
-                />
-                <button onClick={saveDailyGoal} disabled={!isAdmin} className="bg-slate-900 text-white text-[11px] font-bold px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors">Save</button>
-              </div>
-            </div>
+          <div className="flex gap-2">
+            <input type="number" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:border-primary/40" />
+            <button onClick={saveDailyGoal} disabled={!isAdmin} className="bg-slate-900 text-white text-[11px] font-bold px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors">Save</button>
           </div>
         </div>
 
-        {/* Sync & Backup Management */}
         <div className={`bg-white rounded-xl border border-slate-200 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
           <h3 className="font-bold text-sm mb-1">Data Management</h3>
-          <p className="text-xs text-slate-400 mb-4">Sync statuses to cloud or deduplicate database.</p>
-          
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 mt-3">
             <button onClick={handleDeepSync} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-primary/20 text-primary font-bold text-sm hover:bg-primary/5">
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>sync</span> Force Cloud Sync
             </button>
             <button onClick={downloadStatusBackup} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-bold border-slate-200 text-slate-700 hover:bg-slate-50">
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span> Download Backup JSON
+              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>download</span> Download Status JSON
             </button>
             <button onClick={handleSmartCleanup} disabled={!isAdmin} className="flex items-center gap-2 px-4 py-2 mt-2 rounded-lg bg-blue-500 text-white font-bold text-sm shadow-md shadow-blue-500/20">
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>cleaning_services</span> Smart Deduplicate
@@ -277,40 +335,24 @@ export default function SettingsPanel({ leads, isAdmin = false, adminKey = "", s
           </div>
         </div>
 
-        {/* RECENTLY RESTORED: Full Dataset Statistics */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm md:col-span-2 lg:col-span-1">
           <h3 className="font-bold text-sm mb-3">Current Dataset Status</h3>
           <div className="space-y-3 text-xs text-slate-500">
             <div className="flex justify-between"><span>Total leads loaded</span><span className="font-bold text-slate-800">{stats.total}</span></div>
             <div className="flex justify-between"><span>Manually Tagged</span><span className="font-bold text-emerald-600">{stats.tagged}</span></div>
             <div className="flex justify-between"><span>Unique Categories</span><span className="font-bold text-slate-800">{stats.categories}</span></div>
-            
             <div className="pt-3 border-t border-slate-100">
-              <div className="flex justify-between items-end mb-1.5">
-                <span className="font-semibold">Vercel KV Payload Size</span>
-                <span className={`font-black ${stats.kb > 800 ? 'text-red-500' : stats.kb > 500 ? 'text-amber-500' : 'text-primary'}`}>
-                  {stats.sizeDisplay}
-                </span>
-              </div>
+              <div className="flex justify-between items-end mb-1.5"><span className="font-semibold">Vercel KV Size</span><span className="font-black text-primary">{stats.sizeDisplay}</span></div>
               <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-500 ${stats.kb > 800 ? 'bg-red-500' : stats.kb > 500 ? 'bg-amber-500' : 'bg-emerald-500'}`} 
-                  style={{ width: `${stats.percentOfLimit}%` }}
-                ></div>
+                <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${stats.percentOfLimit}%` }}></div>
               </div>
-              <p className="text-[9px] text-slate-400 mt-1.5 text-right">Max serverless limit: ~1024 KB (1MB)</p>
             </div>
           </div>
         </div>
 
-        {/* Danger Zone */}
         <div className={`md:col-span-2 bg-white rounded-xl border border-red-100 p-5 shadow-sm ${!isAdmin ? 'opacity-60' : ''}`}>
-          <h3 className="font-bold text-sm mb-1 text-red-600 font-black flex items-center gap-2">
-            <span className="material-symbols-outlined" style={{fontSize: '18px'}}>warning</span>
-            Danger Zone
-          </h3>
-          <p className="text-xs text-slate-400 mb-3">These actions affect all connected devices and cannot be reversed.</p>
-          <div className="flex flex-col sm:flex-row gap-3">
+          <h3 className="font-bold text-sm mb-1 text-red-600 font-black flex items-center gap-2"><span className="material-symbols-outlined" style={{fontSize: '18px'}}>warning</span> Danger Zone</h3>
+          <div className="flex flex-col sm:flex-row gap-3 mt-3">
             <button onClick={resetAllStatuses} disabled={!isAdmin} className="flex-1 px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors">Reset all status tags</button>
             <button onClick={resetLeadsData} disabled={!isAdmin} className="flex-1 px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors">Wipe leads from cloud</button>
           </div>
